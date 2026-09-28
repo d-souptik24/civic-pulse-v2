@@ -25,10 +25,10 @@ const PIPELINES = [
 ];
 
 const TECH = [
-  { icon: Sparkles, title: 'Gemini Flash Lite',     desc: 'Vision categorization & comparative visual audits at sub-second latency' },
-  { icon: Database, title: 'Supabase & PostgreSQL', desc: 'Real-time database with PostGIS geospatial queries and Row-Level Security' },
+  { icon: Sparkles, title: 'Google Gemini AI',      desc: 'Multimodal vision categorization, authenticity checks & dual-vision resolution audits' },
+  { icon: Database, title: 'Supabase & PostgreSQL', desc: 'Real-time database with PostGIS spatial queries and Row-Level Security' },
   { icon: Globe,    title: 'Leaflet & OpenStreetMap', desc: 'Lightweight, privacy-first interactive maps with custom civic styling' },
-  { icon: Server,   title: 'Node.js & Express',     desc: 'Modular REST API architecture with clean separation of concerns' },
+  { icon: Server,   title: 'Vercel & Node.js',      desc: 'Modular REST API with global Edge CDN and serverless cloud execution' },
 ];
 
 // ── Inline Logo — same as Navbar ──────────────────────────────────────────────
@@ -767,7 +767,7 @@ export default function LandingPage({ onGetStarted }) {
                 marginBottom: '16px',
               }}
             >
-              Built with Modern Google Architecture
+              Built with Modern AI & Cloud Architecture
             </h2>
             <p style={{ fontFamily: 'var(--font-body)', fontSize: '15px', color: 'var(--color-fog)', maxWidth: '480px', margin: '0 auto', lineHeight: 1.7 }}>
               Optimized for performance, horizontal scaling, and secure data verification.
