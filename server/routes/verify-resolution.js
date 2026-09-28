@@ -1,5 +1,5 @@
 import express from 'express';
-import { db, FieldValue } from '../lib/firebase-admin.js';
+import { supabase } from '../lib/supabase.js';
 import { callGemini, extractJSON, toInlineImage } from '../lib/gemini.js';
 import auth from '../middleware/auth.js';
 
@@ -17,24 +17,24 @@ router.post('/', auth, async (req, res) => {
   }
 
   try {
-    // 1. Fetch the issue from Firestore to get the original "before" photo
-    const issueRef = db.collection('issues').doc(issueId);
-    const issueSnap = await issueRef.get();
+    // 1. Fetch the issue to get the original "before" photo
+    const { data: issue, error: fetchError } = await supabase
+      .from('issues')
+      .select('photo_url, reported_by')
+      .eq('id', issueId)
+      .single();
 
-    if (!issueSnap.exists) {
+    if (fetchError || !issue) {
       return res.status(404).json({ error: 'Issue not found' });
     }
 
-    const issueData = issueSnap.data();
-    const { photoUrl: originalPhotoUrl, reportedBy } = issueData;
-
-    if (!originalPhotoUrl) {
+    if (!issue.photo_url) {
       return res.status(400).json({ error: 'Issue has no original photo to compare against' });
     }
 
-    // 2. Download both images and convert to base64 for Gemini inline data
+    // 2. Download both images for Gemini inline data
     const [beforeRes, afterRes] = await Promise.all([
-      fetch(originalPhotoUrl),
+      fetch(issue.photo_url),
       fetch(resolvedPhotoUrl),
     ]);
 
@@ -48,14 +48,10 @@ router.post('/', auth, async (req, res) => {
     ]);
 
     const beforeBase64 = Buffer.from(beforeBuffer).toString('base64');
-    const afterBase64 = Buffer.from(afterBuffer).toString('base64');
+    const afterBase64  = Buffer.from(afterBuffer).toString('base64');
 
-    // Detect MIME type from Content-Type header — default to jpeg
     const beforeMime = beforeRes.headers.get('content-type')?.split(';')[0] || 'image/jpeg';
     const afterMime  = afterRes.headers.get('content-type')?.split(';')[0]  || 'image/jpeg';
-
-    const beforePart = toInlineImage(beforeBase64, beforeMime);
-    const afterPart  = toInlineImage(afterBase64,  afterMime);
 
     // 3. Send both images to Gemini for visual comparison
     const prompt = `
@@ -74,69 +70,65 @@ Respond with ONLY a valid JSON object. No explanations, no markdown:
 }
     `.trim();
 
-    const rawText = await callGemini(prompt, [beforePart, afterPart], 20000, 'minimal');
+    const rawText = await callGemini(
+      prompt,
+      [toInlineImage(beforeBase64, beforeMime), toInlineImage(afterBase64, afterMime)],
+      20000,
+      'minimal'
+    );
+
     const verdict = extractJSON(rawText);
 
     if (!verdict || typeof verdict.resolved !== 'boolean') {
       return res.status(500).json({ error: 'AI returned an unparsable verdict' });
     }
 
-    // 4. Atomically update Firestore inside a Transaction
-    await db.runTransaction(async (transaction) => {
-      // RULE: All database reads MUST occur before any database writes
-      // Read 1: Issue
-      const issueDoc = await transaction.get(issueRef);
-      if (!issueDoc.exists) throw new Error('Issue disappeared during transaction');
+    // 4. Write results to Supabase (sequential — no transaction needed for this pattern)
+    if (verdict.resolved) {
+      const now = new Date().toISOString();
 
-      // Read 2: User (if resolved)
-      let userRef = null;
-      let userDoc = null;
-      if (verdict.resolved && reportedBy) {
-        userRef = db.collection('users').doc(reportedBy);
-        userDoc = await transaction.get(userRef);
-      }
+      const updatedHistory = [
+        ...(issue.status_history || []),
+        { status: 'resolved', timestamp: now, changed_by: 'ai_verifier' }
+      ];
 
-      // Now perform all Writes
-      if (verdict.resolved) {
-        // ── Successful Resolution ──
-        // Update the issue document
-        transaction.update(issueRef, {
-          status: 'resolved',
-          resolvedPhotoUrl,                             // Only written on a PASSING verdict
-          resolvedAt: FieldValue.serverTimestamp(),     // Required for Phase 13 avg-resolution-time calc
-          aiResolutionVerified: true,
-          aiResolutionExplanation: verdict.explanation,
-          statusHistory: FieldValue.arrayUnion({
-            status: 'resolved',
-            timestamp: new Date(),        // Firestore will convert this to a native Timestamp
-            changedBy: 'ai_verifier',
-          }),
+      // Update the issue to resolved
+      await supabase
+        .from('issues')
+        .update({
+          status:                    'resolved',
+          resolved_photo_url:        resolvedPhotoUrl,
+          resolved_at:               now,
+          ai_resolution_verified:    true,
+          ai_resolution_explanation: verdict.explanation,
+          status_history:            updatedHistory,
+        })
+        .eq('id', issueId);
+
+      // Award the original reporter +100 pts and Community Savior badge
+      if (issue.reported_by) {
+        await supabase.rpc('increment_user_points', {
+          uid: issue.reported_by,
+          delta: 100,
         });
-
-        // Update the ORIGINAL reporter's gamification stats
-        if (userDoc && userDoc.exists) {
-          const userData = userDoc.data();
-          const newIssuesResolved = (userData.issuesResolved || 0) + 1;
-          const badgeUpdate = {};
-
-          // HACKATHON THRESHOLD: 1 resolved issue triggers Community Savior badge
-          if (newIssuesResolved >= 1 && !userData.badges?.includes('Community Savior')) {
-            badgeUpdate.badges = FieldValue.arrayUnion('Community Savior');
-            badgeUpdate.lastBadgeAwardedAt = FieldValue.serverTimestamp();
-          }
-
-          transaction.update(userRef, {
-            points:         FieldValue.increment(100),
-            issuesResolved: FieldValue.increment(1),
-            ...badgeUpdate,
-          });
-        }
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('issues_resolved')
+          .eq('id', issue.reported_by)
+          .maybeSingle();
+        await supabase
+          .from('profiles')
+          .update({ issues_resolved: (prof?.issues_resolved || 0) + 1 })
+          .eq('id', issue.reported_by);
+        await supabase.rpc('add_user_badge', {
+          uid: issue.reported_by,
+          badge: 'Community Savior',
+        });
       }
-      // If verification fails, we do NOT write anything to Firestore.
-      // The rejection verdict is passed directly to the frontend dynamically.
-    });
+    }
+    // If verdict is false, we write nothing — the rejection is returned to the frontend only.
 
-    // 5. Return the verdict to the frontend
+    // 5. Return verdict to frontend
     res.json({
       resolved:    verdict.resolved,
       confidence:  verdict.confidence ?? null,

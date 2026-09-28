@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '../lib/firebase.js';
+import { supabase } from '../lib/supabase.js';
 import { useAuth } from '../lib/AuthContext.jsx';
 import { verifyResolution, upvoteIssue, updateIssueStatus } from '../lib/api.js';
 import { STATUS_CONFIG, VERDICT_COLORS } from '../lib/constants.js';
@@ -17,9 +15,27 @@ import {
 
 
 
+function normalizeIssue(raw) {
+  if (!raw) return null;
+  return {
+    ...raw,
+    photoUrl:                raw.photo_url || raw.photoUrl,
+    reportedAt:              raw.reported_at || raw.reportedAt,
+    upvotedBy:               raw.upvoted_by || raw.upvotedBy || [],
+    aiAuthenticity:          raw.ai_authenticity ?? raw.aiAuthenticity,
+    aiReasoning:             raw.ai_reasoning || raw.aiReasoning,
+    aiEscalationSummary:     raw.ai_escalation_summary || raw.aiEscalationSummary,
+    aiResolutionVerified:    raw.ai_resolution_verified ?? raw.aiResolutionVerified,
+    aiResolutionExplanation: raw.ai_resolution_explanation || raw.aiResolutionExplanation,
+    statusHistory:           raw.status_history || raw.statusHistory || [],
+    resolvedPhotoUrl:        raw.resolved_photo_url || raw.resolvedPhotoUrl,
+    resolvedAt:              raw.resolved_at || raw.resolvedAt,
+  };
+}
+
 function timeAgo(timestamp) {
   if (!timestamp) return 'just now';
-  const ms = Date.now() - (timestamp?.toMillis?.() ?? new Date(timestamp).getTime());
+  const ms = Date.now() - new Date(timestamp).getTime();
   const h = Math.floor(ms / 3600000);
   if (h < 1) return `${Math.floor(ms / 60000)}m ago`;
   if (h < 24) return `${h}h ago`;
@@ -28,7 +44,7 @@ function timeAgo(timestamp) {
 
 function formatTimestamp(ts) {
   if (!ts) return '';
-  const d = ts?.toDate?.() ?? new Date(ts);
+  const d = new Date(ts);
   return d.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
@@ -71,7 +87,7 @@ function StatusTimeline({ statusHistory }) {
 export default function IssueDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, getToken } = useAuth();
 
   const [issue, setIssue] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -90,18 +106,15 @@ export default function IssueDetail() {
   const fileInputRef = useRef();
   const prevPreviewRef = useRef();
 
-  // ── Real-time Firestore listener ─────────────────────────────────────────────
+  // ── Fetch issue from Supabase ───────────────────────────────────────────────────
   useEffect(() => {
     if (!id) return;
-    const unsub = onSnapshot(doc(db, 'issues', id), (snap) => {
-      if (!snap.exists()) {
-        setNotFound(true);
-      } else {
-        setIssue({ id: snap.id, ...snap.data() });
-      }
-      setLoading(false);
-    });
-    return unsub;
+    supabase.from('issues').select('*').eq('id', id).single()
+      .then(({ data, error }) => {
+        if (error || !data) setNotFound(true);
+        else setIssue(normalizeIssue(data));
+        setLoading(false);
+      });
   }, [id]);
 
   // ── Blob URL cleanup on unmount ───────────────────────────────────────────────
@@ -134,8 +147,10 @@ export default function IssueDetail() {
     
     setIsUpvoting(true);
     try {
-      const token = await user.getIdToken();
+      const token = await getToken();
       await upvoteIssue(id, token);
+      const { data } = await supabase.from('issues').select('*').eq('id', id).single();
+      if (data) setIssue(normalizeIssue(data));
     } catch (err) {
       console.error('Failed to upvote:', err);
     } finally {
@@ -149,8 +164,10 @@ export default function IssueDetail() {
     setIsMarkingProgress(true);
     setActionError(null);
     try {
-      const token = await user.getIdToken();
+      const token = await getToken();
       await updateIssueStatus(id, 'in_progress', token);
+      const { data } = await supabase.from('issues').select('*').eq('id', id).single();
+      if (data) setIssue(normalizeIssue(data));
     } catch (err) {
       console.error(err);
       setActionError('Failed to update status. Please try again.');
@@ -167,34 +184,37 @@ export default function IssueDetail() {
     setUploadProgress(0);
 
     try {
-      // 1. Upload "After" photo to Firebase Storage (client-side, same pattern as Step1Photo)
-      const storageRef = ref(storage, `resolutions/${id}_${Date.now()}_${resolutionFile.name}`);
-      const metadata = { customMetadata: { userId: user.uid } };
-      const uploadTask = uploadBytesResumable(storageRef, resolutionFile, metadata);
+      // 1. Upload "After" photo to Supabase Storage
+      const ext = resolutionFile.name.split('.').pop() || 'jpg';
+      const filePath = `${id}_${Date.now()}.${ext}`;
+      setUploadProgress(30);
 
-      const resolvedPhotoUrl = await new Promise((resolve, reject) => {
-        uploadTask.on(
-          'state_changed',
-          (snapshot) => {
-            setUploadProgress((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
-          },
-          (err) => reject(new Error('Upload failed: ' + err.message)),
-          async () => resolve(await getDownloadURL(uploadTask.snapshot.ref))
-        );
-      });
+      const { error: uploadError } = await supabase.storage
+        .from('resolutions')
+        .upload(filePath, resolutionFile, { upsert: false });
 
+      if (uploadError) throw new Error('Upload failed: ' + uploadError.message);
+
+      setUploadProgress(80);
+      const { data: { publicUrl } } = supabase.storage
+        .from('resolutions')
+        .getPublicUrl(filePath);
+
+      const resolvedPhotoUrl = publicUrl;
       setUploadProgress(100);
 
-      // 2. Call backend — it fetches both images, calls Gemini, updates Firestore
-      const token = await user.getIdToken();
+      // 2. Call backend — it fetches both images, calls Gemini, updates Supabase
+      const token = await getToken();
       const result = await verifyResolution(id, resolvedPhotoUrl, token);
       setVerdict(result);
 
-      // Clean up local preview blob on success
+      // Clean up local preview blob on success and refresh issue
       if (result.resolved) {
         if (prevPreviewRef.current) URL.revokeObjectURL(prevPreviewRef.current);
         setResolutionPreview(null);
         setResolutionFile(null);
+        const { data } = await supabase.from('issues').select('*').eq('id', id).single();
+        if (data) setIssue(normalizeIssue(data));
       }
     } catch (err) {
       console.error('Verification failed:', err);
@@ -270,7 +290,7 @@ export default function IssueDetail() {
   }
 
   const cfg = STATUS_CONFIG[issue.status] || STATUS_CONFIG.open;
-  // isAdmin comes from useAuth() — backed by Firebase Custom Claims, not spoofable
+  // isAdmin comes from useAuth() — backed by Supabase profiles.is_admin, not spoofable
   const isResolved = issue.status === 'resolved';
   const canMarkInProgress = isAdmin && issue.status !== 'in_progress';
   // canMarkFixed is now accessible to ANY logged-in user
@@ -392,7 +412,7 @@ export default function IssueDetail() {
                 </div>
               )}
 
-              {/* Resolved photo from Firestore */}
+              {/* Resolved photo from Supabase Storage */}
               {isResolved && issue.resolvedPhotoUrl && !resolutionPreview && (
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--color-fog)' }}>Resolved</p>

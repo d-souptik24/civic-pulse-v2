@@ -1,254 +1,191 @@
-import { useCallback, useRef, useState } from 'react';
-import { GoogleMap, useLoadScript, MarkerF, InfoWindowF } from '@react-google-maps/api';
+import { useCallback, useEffect, useState } from 'react';
+import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from 'react-leaflet';
 import { Locate } from 'lucide-react';
 import { STATUS_COLORS_HEX } from '../lib/constants.js';
+import 'leaflet/dist/leaflet.css';
 
-const LIBRARIES = []; // 'visualization' removed as heatmap is deprecated
-
-// STATUS_COLORS removed — imported as STATUS_COLORS_HEX from lib/constants.js
-
-// Civic Authority light map — stone/paper palette per DESIGN_IDEA_1
-// Matches the page background so the map feels printed on the same paper
-// Civic Authority Clean-Realistic light map style
-// Uses realistic colors (natural blue water, fresh green parks, highway orange) 
-// but is cleaned of POI and transit clutter. Distinct from the warm page background (#F1EEE9).
-const MAP_STYLES = [
-  { elementType: 'geometry',             stylers: [{ color: '#F5F5F5' }] }, // Clean light gray base
-  { elementType: 'labels.text.stroke',   stylers: [{ color: '#F5F5F5' }] },
-  { elementType: 'labels.text.fill',     stylers: [{ color: '#616161' }] }, // Highly readable neutral labels
-  { featureType: 'landscape',            elementType: 'geometry',            stylers: [{ color: '#EEEEEE' }] }, // Slightly darker land
-  { featureType: 'water',                elementType: 'geometry',            stylers: [{ color: '#A2C4E0' }] }, // Realistic fresh blue water
-  { featureType: 'water',                elementType: 'labels.text.fill',    stylers: [{ color: '#3A5B75' }] },
-  { featureType: 'road',                 elementType: 'geometry',            stylers: [{ color: '#FFFFFF' }] },
-  { featureType: 'road',                 elementType: 'geometry.stroke',     stylers: [{ color: '#E0E0E0' }] },
-  { featureType: 'road.arterial',        elementType: 'geometry',            stylers: [{ color: '#FFFFFF' }] },
-  { featureType: 'road.highway',         elementType: 'geometry',            stylers: [{ color: '#FCD8A5' }] }, // Believable highway orange
-  { featureType: 'road.highway',         elementType: 'geometry.stroke',     stylers: [{ color: '#ECC48F' }] },
-  { featureType: 'poi',                  stylers: [{ visibility: 'off' }] },
-  { featureType: 'poi.park',             elementType: 'geometry',            stylers: [{ color: '#CBE5C8' }] }, // Natural fresh park green
-  { featureType: 'transit',              stylers: [{ visibility: 'off' }] },
-  { featureType: 'administrative',       elementType: 'geometry.stroke',     stylers: [{ color: '#BDBDBD' }] },
-  { featureType: 'administrative.locality', elementType: 'labels.text.fill', stylers: [{ color: '#212121' }] },
-];
-
-const DEFAULT_CENTER = { lat: 28.6139, lng: 77.2090 }; // Delhi
+const DEFAULT_CENTER = [28.6139, 77.2090]; // Delhi [lat, lng]
 const DEFAULT_ZOOM = 13;
 
 const CATEGORY_EMOJI = {
   pothole:      '🕳️',
   streetlight:  '💡',
-  water:        '💧',
-  garbage:      '🗑️',
-  road_damage:  '🚧',
-  sewage:       '🚨',
-  encroachment: '🏗️',
+  water_leak:   '💧',
+  waste:        '🗑️',
   other:        '📍',
 };
 
+/**
+ * Helper component: programmatically pan/zoom the map when userLocation changes.
+ * react-leaflet requires this pattern since the map instance lives outside React state.
+ */
+function FlyToLocation({ location }) {
+  const map = useMap();
+  useEffect(() => {
+    if (location) map.flyTo(location, 17, { duration: 1 });
+  }, [location, map]);
+  return null;
+}
+
+/**
+ * Helper component: fire onCenterChange when the user pans the map.
+ */
+function CenterTracker({ onCenterChange }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!onCenterChange) return;
+    const handler = () => {
+      const c = map.getCenter();
+      onCenterChange({ lat: c.lat, lng: c.lng });
+    };
+    map.on('moveend', handler);
+    return () => map.off('moveend', handler);
+  }, [map, onCenterChange]);
+  return null;
+}
+
 export function Map({ issues = [], onIssueClick, onCenterChange }) {
-  const [selectedIssue, setSelectedIssue]   = useState(null);
-  const [userLocation,  setUserLocation]    = useState(null);
-  const mapRef = useRef(null);
+  const [userLocation, setUserLocation] = useState(null);
 
-  const { isLoaded, loadError } = useLoadScript({
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
-    libraries: LIBRARIES,
-  });
-
-  const onMapLoad = useCallback((map) => {
-    mapRef.current = map;
-  }, []);
-
-  const onCenterChanged = useCallback(() => {
-    if (!mapRef.current) return;
-    const c = mapRef.current.getCenter();
-    if (c && onCenterChange) {
-      onCenterChange({ lat: c.lat(), lng: c.lng() });
-    }
-  }, [onCenterChange]);
-
-  const handleUseMyLocation = () => {
+  const handleUseMyLocation = useCallback(() => {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        setUserLocation(loc);
-        mapRef.current?.panTo(loc);
-        mapRef.current?.setZoom(17);
-      },
+      (pos) => setUserLocation([pos.coords.latitude, pos.coords.longitude]),
       (err) => console.warn('Geolocation denied:', err.message)
     );
-  };
-
-  if (loadError) {
-    return (
-      <div
-        className="flex items-center justify-center h-full rounded-xl text-sm p-6"
-        style={{ backgroundColor: 'var(--color-stone-paper)', color: 'var(--color-signal-red)' }}
-      >
-        ⚠️ Map failed to load. Check your Google Maps API key.
-      </div>
-    );
-  }
-
-  if (!isLoaded) {
-    return (
-      <div
-        className="flex items-center justify-center h-full rounded-xl"
-        style={{ backgroundColor: 'var(--color-stone-paper)' }}
-      >
-        <div className="flex flex-col items-center gap-3">
-          <div
-            className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin"
-            style={{ borderColor: 'var(--color-plum)', borderTopColor: 'transparent' }}
-          />
-          <span style={{ color: 'var(--color-fog)', fontSize: '14px' }}>Loading map…</span>
-        </div>
-      </div>
-    );
-  }
+  }, []);
 
   return (
     <div className="relative h-full w-full overflow-hidden" style={{ borderRadius: 'var(--radius-card)' }}>
-      <GoogleMap
-        mapContainerStyle={{ width: '100%', height: '100%' }}
+      <MapContainer
         center={DEFAULT_CENTER}
         zoom={DEFAULT_ZOOM}
-        onLoad={onMapLoad}
-        onCenterChanged={onCenterChanged}
-        options={{
-          styles: MAP_STYLES,
-          disableDefaultUI: true,
-          zoomControl: true,
-          zoomControlOptions: { position: 9 },
-          clickableIcons: false,
-          gestureHandling: 'cooperative',
-        }}
-        onClick={() => setSelectedIssue(null)}
+        style={{ width: '100%', height: '100%' }}
+        zoomControl={true}
+        attributionControl={true}
       >
+        {/* Humanitarian OpenStreetMap (HOT) tiles — 100% free, no API key, no watermarks, hosted by OSM France */}
+        <TileLayer
+          url="https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, Tiles style by <a href="https://www.hotosm.org/" target="_blank">HOT</a>'
+          maxZoom={19}
+        />
+
+        <FlyToLocation location={userLocation} />
+        <CenterTracker onCenterChange={onCenterChange} />
+
         {/* Issue markers */}
         {issues.map((issue) => {
-          if (!issue.location?.lat || !issue.location?.lng) return null;
+          // Handle PostGIS location format OR legacy { lat, lng } object
+          const lat = issue.location?.lat ?? issue.lat;
+          const lng = issue.location?.lng ?? issue.lng;
+          if (!lat || !lng) return null;
+
           const color = STATUS_COLORS_HEX[issue.status] ?? STATUS_COLORS_HEX.open;
+          const radius = (issue.upvotes ?? 0) >= 5 ? 12 : 9;
+
           return (
-            <MarkerF
+            <CircleMarker
               key={issue.id}
-              position={{ lat: issue.location.lat, lng: issue.location.lng }}
-              title={issue.title}
-              icon={{
-                path: window.google.maps.SymbolPath.CIRCLE,
+              center={[lat, lng]}
+              radius={radius}
+              pathOptions={{
                 fillColor: color,
                 fillOpacity: 1,
-                strokeColor: '#FFFFFF',  // Stone White ring — status color never ambiguous with selection
-                strokeWeight: 2,
-                scale: (issue.upvotes ?? 0) >= 5 ? 12 : 9,
+                color: '#FFFFFF',
+                weight: 2,
               }}
-              onClick={() => setSelectedIssue(issue)}
-            />
+            >
+              <Popup>
+                <div
+                  style={{
+                    minWidth: '180px',
+                    maxWidth: '240px',
+                    fontFamily: 'var(--font-body)',
+                    color: 'var(--color-ink)',
+                  }}
+                >
+                  {/* Issue header */}
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '18px' }}>{CATEGORY_EMOJI[issue.category] ?? '📍'}</span>
+                    <div>
+                      <p style={{ fontWeight: 600, fontSize: '14px', lineHeight: '1.3', margin: 0 }}>
+                        {issue.title}
+                      </p>
+                      <p style={{ fontSize: '12px', color: 'var(--color-fog)', marginTop: '2px', textTransform: 'capitalize' }}>
+                        {issue.category?.replace('_', ' ')}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Status + upvotes */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <span
+                      style={{
+                        backgroundColor: STATUS_COLORS_HEX[issue.status] ?? 'var(--color-fog)',
+                        color: issue.status === 'in_progress' ? 'var(--color-ink)' : '#ffffff',
+                        fontSize: '10px',
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        fontWeight: 600,
+                        textTransform: 'capitalize',
+                      }}
+                    >
+                      {issue.status?.replace('_', ' ')}
+                    </span>
+                    <span style={{ fontSize: '12px', color: 'var(--color-fog)' }}>
+                      👍 {issue.upvotes ?? 0}
+                    </span>
+                  </div>
+
+                  {/* Case ID */}
+                  <div className="case-id-chip" style={{ marginBottom: onIssueClick ? '8px' : '0' }}>
+                    CP-{issue.id?.slice(0, 6).toUpperCase()}
+                  </div>
+
+                  {onIssueClick && (
+                    <button
+                      onClick={() => onIssueClick(issue)}
+                      className="btn-secondary"
+                      style={{ width: '100%', fontSize: '12px', padding: '6px 12px', marginTop: '4px' }}
+                    >
+                      View details →
+                    </button>
+                  )}
+                </div>
+              </Popup>
+            </CircleMarker>
           );
         })}
 
-
-
         {/* User "You are here" blue dot */}
         {userLocation && (
-          <MarkerF
-            position={userLocation}
-            title="You are here"
-            zIndex={1000}
-            icon={{
-              path: window.google.maps.SymbolPath.CIRCLE,
-              fillColor: '#3b82f6',
-              fillOpacity: 1,
-              strokeColor: '#ffffff',
-              strokeWeight: 3,
-              scale: 10,
-            }}
+          <CircleMarker
+            center={userLocation}
+            radius={10}
+            pathOptions={{ fillColor: '#3b82f6', fillOpacity: 1, color: '#ffffff', weight: 3 }}
           />
         )}
-
-        {/* Info window on marker click */}
-        {selectedIssue && (
-          <InfoWindowF
-            position={{ lat: selectedIssue.location.lat, lng: selectedIssue.location.lng }}
-            onCloseClick={() => setSelectedIssue(null)}
-          >
-            <div
-              style={{
-                backgroundColor: 'var(--color-stone-white)',
-                color: 'var(--color-ink)',
-                borderRadius: 'var(--radius-card)',
-                boxShadow: 'var(--shadow-report-card)',
-                padding: '14px 16px',
-                minWidth: '200px',
-                maxWidth: '260px',
-                fontFamily: 'var(--font-body)',
-              }}
-            >
-              {/* Issue header */}
-              <div className="flex items-start gap-2 mb-2">
-                <span className="text-xl">{CATEGORY_EMOJI[selectedIssue.category] ?? '📍'}</span>
-                <div>
-                  <p style={{ fontWeight: 600, fontSize: '14px', lineHeight: '1.3', color: 'var(--color-ink)' }}>
-                    {selectedIssue.title}
-                  </p>
-                  <p style={{ fontSize: '12px', color: 'var(--color-fog)', marginTop: '2px', textTransform: 'capitalize' }}>
-                    {selectedIssue.category?.replace('_', ' ')}
-                  </p>
-                </div>
-              </div>
-
-              {/* Status + upvotes row */}
-              <div className="flex items-center justify-between" style={{ marginBottom: '10px' }}>
-                <span
-                  className="badge-status"
-                  style={{
-                    backgroundColor: STATUS_COLORS_HEX[selectedIssue.status] ?? 'var(--color-fog)',
-                    color: selectedIssue.status === 'in_progress' ? 'var(--color-ink)' : '#ffffff',
-                    fontSize: '10px',
-                    padding: '2px 6px',
-                  }}
-                >
-                  {selectedIssue.status?.replace('_', ' ')}
-                </span>
-                <span style={{ fontSize: '12px', color: 'var(--color-fog)' }}>👍 {selectedIssue.upvotes ?? 0}</span>
-              </div>
-
-              {/* Case ID chip */}
-              <div className="case-id-chip" style={{ marginBottom: onIssueClick ? '10px' : '0' }}>
-                CP-{selectedIssue.id?.slice(0, 6).toUpperCase()}
-              </div>
-
-              {onIssueClick && (
-                <button
-                  onClick={() => { onIssueClick(selectedIssue); setSelectedIssue(null); }}
-                  className="btn-secondary"
-                  style={{ width: '100%', fontSize: '12px', padding: '6px 12px', marginTop: '4px' }}
-                >
-                  View details →
-                </button>
-              )}
-            </div>
-          </InfoWindowF>
-        )}
-      </GoogleMap>
+      </MapContainer>
 
       {/* My Location button */}
       <button
         id="btn-use-my-location"
         onClick={handleUseMyLocation}
-        className="absolute bottom-4 right-4 flex items-center gap-2 transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-plum)] focus-visible:ring-offset-2"
+        className="absolute bottom-4 right-4 flex items-center gap-2 transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-plum focus-visible:ring-offset-2"
         style={{
           backgroundColor: 'var(--color-stone-white)',
           color: 'var(--color-plum)',
           border: '1px solid var(--color-stone-line)',
           borderRadius: 'var(--radius-control)',
           boxShadow: 'var(--shadow-card)',
-          padding: '10px 16px', // 44px touch target height equivalent
+          padding: '10px 16px',
           fontSize: '13px',
           fontFamily: 'var(--font-body)',
           fontWeight: 600,
           cursor: 'pointer',
+          zIndex: 1000,        // Must be above Leaflet's own controls
+          position: 'absolute',
         }}
         onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-plum)'; }}
         onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-stone-line)'; }}

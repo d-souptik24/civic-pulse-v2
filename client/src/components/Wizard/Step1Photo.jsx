@@ -1,9 +1,21 @@
 import { useState, useRef } from 'react';
 import { UploadCloud, Loader2, Image as ImageIcon, AlertTriangle } from 'lucide-react';
-import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
-import { storage } from '../../lib/firebase';
-import { analyzePhoto } from '../../lib/api';
-import { useAuth } from '../../lib/AuthContext';
+import { gps as exifrGps } from 'exifr';
+import { supabase } from '../../lib/supabase.js';
+import { analyzePhoto } from '../../lib/api.js';
+import { useAuth } from '../../lib/AuthContext.jsx';
+
+// Extract GPS from raw File EXIF before upload (must happen before Supabase Storage URL,
+// as CORS headers on the CDN URL prevent binary EXIF access from the browser).
+async function extractExifGps(file) {
+  try {
+    const result = await exifrGps(file);
+    if (result?.latitude && result?.longitude) {
+      return [result.latitude, result.longitude];
+    }
+  } catch { /* no EXIF or unsupported format — silent fallback */ }
+  return null;
+}
 
 export default function Step1Photo({ onComplete }) {
   const { user } = useAuth();
@@ -18,6 +30,7 @@ export default function Step1Photo({ onComplete }) {
   const handleFileSelect = (e) => {
     const selected = e.target.files[0];
     if (selected) {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
       setFile(selected);
       setPreviewUrl(URL.createObjectURL(selected));
       setError(null);
@@ -33,39 +46,30 @@ export default function Step1Photo({ onComplete }) {
     setUploadProgress(0);
 
     try {
-      const storageRef = ref(storage, `issues/${Date.now()}_${file.name}`);
-      const metadata = { customMetadata: { userId: user.uid } };
-      const uploadTask = uploadBytesResumable(storageRef, file, metadata);
+      // Extract GPS from EXIF *before* upload — raw File object only
+      const exifLocation = await extractExifGps(file);
 
-      const imageUrl = await new Promise((resolve, reject) => {
-        uploadTask.on(
-          'state_changed',
-          (snapshot) => {
-            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-            setUploadProgress(progress);
-          },
-          (error) => {
-            console.error('Storage upload failed:', error);
-            reject(new Error('Failed to upload image. Please try again.'));
-          },
-          async () => {
-            const url = await getDownloadURL(uploadTask.snapshot.ref);
-            resolve(url);
-          }
-        );
-      });
+      const filePath = `issues/${user.id}/${Date.now()}_${file.name}`;
+
+      setUploadProgress(30); // Supabase doesn't expose upload progress, so simulate stages
+      const { error: uploadError } = await supabase.storage
+        .from('issues')
+        .upload(filePath, file, { upsert: false });
+
+      if (uploadError) throw new Error('Failed to upload image. Please try again.');
+
+      setUploadProgress(80);
+      const { data: { publicUrl } } = supabase.storage.from('issues').getPublicUrl(filePath);
+      const imageUrl = publicUrl;
 
       setUploadProgress(100);
-      const token = await user.getIdToken();
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
       const analysisResult = await analyzePhoto(imageUrl, token);
 
       if (analysisResult.isAuthentic === false) {
-        // Delete orphaned image
-        try {
-          await deleteObject(storageRef);
-        } catch (e) {
-          console.error('Failed to delete rejected image from storage:', e);
-        }
+        // Delete orphaned image from Supabase Storage
+        supabase.storage.from('issues').remove([filePath]).catch(() => {});
         setRejection({ reasoning: analysisResult.reasoning });
         return;
       }
@@ -78,7 +82,8 @@ export default function Step1Photo({ onComplete }) {
         isAuthentic: analysisResult.isAuthentic ?? false,
         confidence: analysisResult.confidence ?? 0,
         reasoning: analysisResult.reasoning || null,
-        verdictToken: analysisResult.verdictToken
+        verdictToken: analysisResult.verdictToken,
+        exifLocation, // [lat, lng] or null — passed to Step2 for pin auto-placement
       });
 
     } catch (err) {
@@ -101,7 +106,7 @@ export default function Step1Photo({ onComplete }) {
         {!previewUrl ? (
           <div
             onClick={() => fileInputRef.current?.click()}
-            className="border-dashed border-2 rounded-2xl p-6 sm:p-12 text-center cursor-pointer transition-all flex flex-col items-center justify-center min-h-[300px]"
+            className="border-dashed border-2 rounded-2xl p-6 sm:p-12 text-center cursor-pointer transition-all flex flex-col items-center justify-center min-h-75"
             style={{ borderColor: 'var(--color-stone-line)', backgroundColor: 'rgba(34,31,38,0.02)' }}
             onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-plum)'; e.currentTarget.style.backgroundColor = 'rgba(75, 46, 70, 0.02)'; }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-stone-line)'; e.currentTarget.style.backgroundColor = 'rgba(34,31,38,0.02)'; }}
@@ -115,7 +120,7 @@ export default function Step1Photo({ onComplete }) {
             className="relative rounded-2xl overflow-hidden aspect-video flex items-center justify-center border"
             style={{ backgroundColor: 'var(--color-stone-paper)', borderColor: 'var(--color-stone-line)' }}
           >
-            <img src={previewUrl} alt="Preview" className="max-h-[300px] object-contain" />
+            <img src={previewUrl} alt="Preview" className="max-h-75 object-contain" />
             {!isAnalyzing && (
               <button
                 onClick={() => { setFile(null); setPreviewUrl(null); }}

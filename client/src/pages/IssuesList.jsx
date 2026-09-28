@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { collection, onSnapshot, query, orderBy, limit, where } from 'firebase/firestore';
-import { db } from '../lib/firebase.js';
+import { supabase } from '../lib/supabase.js';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../lib/AuthContext.jsx';
 import { AlertCircle, CheckCircle, Clock, Filter, ThumbsUp } from 'lucide-react';
@@ -45,7 +44,7 @@ const CATEGORY_EMOJI = {
 
 function timeAgo(timestamp) {
   if (!timestamp) return 'just now';
-  const ms = Date.now() - (timestamp?.toMillis?.() ?? new Date(timestamp).getTime());
+  const ms = Date.now() - new Date(timestamp).getTime();
   const h = Math.floor(ms / 3600000);
   if (h < 1) return `${Math.floor(ms / 60000)}m ago`;
   if (h < 24) return `${h}h ago`;
@@ -56,19 +55,22 @@ function timeAgo(timestamp) {
 function IssueCard({ issue, onClick }) {
   const cfg = STATUS_CONFIG[issue.status] ?? STATUS_CONFIG.open;
   const emoji = CATEGORY_EMOJI[issue.category] ?? '📍';
+  const photo = issue.photo_url || issue.photoUrl;
+  const reportedAt = issue.reported_at || issue.reportedAt;
+  const aiAuthentic = issue.ai_authenticity ?? issue.aiAuthenticity;
 
   return (
     <button
       id={`issue-card-${issue.id}`}
       onClick={onClick}
-      className="card-white p-4 text-left w-full group transition-all duration-200 hover:scale-[1.01] hover:border-[var(--color-plum-light)] hover:bg-[#F8F6F4] hover:shadow-md animate-fade-in"
+      className="card-white p-4 text-left w-full group transition-all duration-200 hover:scale-[1.01] hover:border-plum-light hover:bg-[#F8F6F4] hover:shadow-md animate-fade-in"
       style={{ display: 'block' }}
     >
       {/* Photo + Status Row */}
       <div className="flex items-start gap-3 mb-3">
-        {issue.photoUrl ? (
+        {photo ? (
           <img
-            src={issue.photoUrl}
+            src={photo}
             alt={issue.title}
             className="w-16 h-16 object-cover shrink-0"
             style={{ borderRadius: 'var(--radius-image)', border: '1px solid var(--color-stone-line)' }}
@@ -105,13 +107,13 @@ function IssueCard({ issue, onClick }) {
       <div className="flex items-center gap-4 text-xs" style={{ color: 'var(--color-fog)' }}>
         <span className="flex items-center gap-1">
           <Clock size={10} />
-          {timeAgo(issue.reportedAt)}
+          {timeAgo(reportedAt)}
         </span>
         <span className="flex items-center gap-1">
           <ThumbsUp size={10} />
           {issue.upvotes ?? 0}
         </span>
-        {issue.aiAuthenticity && (
+        {aiAuthentic && (
           <span className="flex items-center gap-1" style={{ color: 'var(--color-signal-green)' }}>
             <CheckCircle size={10} />
             AI Verified
@@ -139,37 +141,33 @@ export default function IssuesList() {
   const { user, isAdmin } = useAuth();
   const navigate = useNavigate();
 
-  // Real-time Firestore listener — .limit(100) defensive query boundary
   useEffect(() => {
     setLoading(true);
-    let q;
 
     if (reporterFilter && reporterFilter !== 'me' && reporterFilter !== user?.uid && !isAdmin) {
       navigate('/issues');
       return;
     }
 
-    if (reporterFilter && reporterFilter !== 'me' && user) {
-      q = query(collection(db, 'issues'), where('reportedBy', '==', reporterFilter));
-    } else if (reporterFilter === 'me' && user) {
-      q = query(collection(db, 'issues'), where('reportedBy', '==', user.uid));
-    } else {
-      q = query(collection(db, 'issues'), orderBy('reportedAt', 'desc'), limit(100));
-    }
+    async function fetchIssues() {
+      let query = supabase
+        .from('issues')
+        .select('*')
+        .order('reported_at', { ascending: false })
+        .limit(100);
 
-    const unsub = onSnapshot(q, (snap) => {
-      let docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      if (reporterFilter === 'me') {
-        docs.sort((a, b) => {
-          const tA = a.reportedAt?.toMillis?.() || 0;
-          const tB = b.reportedAt?.toMillis?.() || 0;
-          return tB - tA;
-        });
+      if (reporterFilter && reporterFilter !== 'me' && user) {
+        query = query.eq('reported_by', reporterFilter);
+      } else if (reporterFilter === 'me' && user) {
+        query = query.eq('reported_by', user.id);
       }
-      setIssues(docs);
+
+      const { data, error } = await query;
+      if (error) { console.error('Failed to fetch issues:', error); return; }
+      setIssues(data ?? []);
       setLoading(false);
-    });
-    return unsub;
+    }
+    fetchIssues();
   }, [reporterFilter, user, isAdmin, navigate]);
 
   const filtered = issues.filter((issue) => {
@@ -232,7 +230,7 @@ export default function IssuesList() {
         </div>
 
         {/* Status Filter */}
-        <div className="flex-1 w-full min-w-[160px]">
+        <div className="flex-1 w-full min-w-40">
           <label className="block text-xs font-medium mb-1.5 uppercase tracking-wider" style={{ color: 'var(--color-fog)' }}>
             Status
           </label>
@@ -249,7 +247,7 @@ export default function IssuesList() {
         </div>
 
         {/* Category Filter */}
-        <div className="flex-1 w-full min-w-[160px]">
+        <div className="flex-1 w-full min-w-40">
           <label className="block text-xs font-medium mb-1.5 uppercase tracking-wider" style={{ color: 'var(--color-fog)' }}>
             Category
           </label>

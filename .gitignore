@@ -1,48 +1,82 @@
-# ── Secrets — NEVER commit these ─────────────────────────────────────────────
-server/.env
-client/.env
+# ── Environment & Secrets (NEVER commit to GitHub) ───────────────────────────
 .env
+.env.*
+*.env
+*.env.*
+!.env.example
+!*.env.example
 env.yaml
 Dockerfile
-# Firebase service account key ─────────────────────────────────────────────
+
+# ── Keys, Certificates & Credentials ──────────────────────────────────────────
 *-firebase-adminsdk-*.json
 *service-account*.json
 *credentials*.json
 *.key
 *.pem
+*.pfx
+*.p12
+*.cert
+*.crt
+id_rsa*
+id_ed25519*
 
 # ── Dependencies ─────────────────────────────────────────────────────────────
 node_modules/
 client/node_modules/
 server/node_modules/
 
-# ── Build output ─────────────────────────────────────────────────────────────
+# ── Build & Deployment Output ────────────────────────────────────────────────
 client/dist/
+dist/
+dist-ssr/
 server/public/
+.vercel/
+.turbo/
 
-# ── Documentation ────────────────────────
+# ── Internal Documentation & Planning (Keep Private) ─────────────────────────
 guidelines/
 plan/
 walkthrough/
 docs/
 deprecated/
 
-# ── IDE / Editor ─────────────────────────────────────────────────────────────
+# ── AI Agents & Knowledge Graphs ─────────────────────────────────────────────
 .agents/
 graphify-out/
+
+# ── IDE & Editor Files ───────────────────────────────────────────────────────
 .vscode/
 .idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.sublime-*
 
-# ── Logs ─────────────────────────────────────────────────────────────────────
+# ── Logs & Debugging ─────────────────────────────────────────────────────────
 *.log
+logs/
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
-# ── OS ───────────────────────────────────────────────────────────────────────
+# ── OS Generated Files ───────────────────────────────────────────────────────
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+Desktop.ini
 
-# ── Local Design Assets ──────────────────────────────────────────────────────
+# ── Local Design & Media Assets ──────────────────────────────────────────────
 assets/
 
-# ── Local Scratch Scripts ───────────────────────────────────────────────────
-server/scratch/makeAdmin.js
+# ── Local Scratch & Test Scripts ─────────────────────────────────────────────
+scratch/
+server/scratch/
+**/scratch/**

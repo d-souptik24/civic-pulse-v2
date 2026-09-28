@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { collection, onSnapshot, query, orderBy, limit, where, getCountFromServer } from 'firebase/firestore';
-import { db } from '../lib/firebase.js';
+import { supabase } from '../lib/supabase.js';
 import { useNavigate } from 'react-router-dom';
 import { triggerEscalation } from '../lib/api.js';
 import { useAuth } from '../lib/AuthContext.jsx';
@@ -10,10 +9,9 @@ import {
 } from 'lucide-react';
 import { STATUS_CONFIG } from '../lib/constants.js';
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
 function timeAgo(timestamp) {
   if (!timestamp) return 'just now';
-  const ms = Date.now() - (timestamp?.toMillis?.() ?? new Date(timestamp).getTime());
+  const ms = Date.now() - new Date(timestamp).getTime();
   const h = Math.floor(ms / 3600000);
   if (h < 1) return `${Math.floor(ms / 60000)}m ago`;
   if (h < 24) return `${h}h ago`;
@@ -58,12 +56,12 @@ export default function AdminPage() {
   const fetchMetrics = useCallback(async () => {
     setMetricsLoading(true);
     try {
-      const [totalSnap, resolvedSnap] = await Promise.all([
-        getCountFromServer(collection(db, 'issues')),
-        getCountFromServer(query(collection(db, 'issues'), where('status', '==', 'resolved'))),
+      const [{ count: total }, { count: resolved }] = await Promise.all([
+        supabase.from('issues').select('*', { count: 'exact', head: true }),
+        supabase.from('issues').select('*', { count: 'exact', head: true }).eq('status', 'resolved'),
       ]);
-      setTotalReports(totalSnap.data().count);
-      setResolvedCount(resolvedSnap.data().count);
+      setTotalReports(total ?? 0);
+      setResolvedCount(resolved ?? 0);
     } catch (err) {
       console.error('Failed to fetch aggregate counts:', err);
     } finally {
@@ -73,16 +71,22 @@ export default function AdminPage() {
 
   useEffect(() => { fetchMetrics(); }, [fetchMetrics]);
 
-  // ── Real-time listener for rolling window (last 100 issues) ──────────────────
+  // ── Fetch rolling window (last 100 issues) ────────────────────────────────────
   useEffect(() => {
-    const q = query(collection(db, 'issues'), orderBy('reportedAt', 'desc'), limit(100));
-    const unsub = onSnapshot(q, (snap) => {
-      const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      setIssues(data);
-      setEscalated(data.filter((i) => i.status === 'escalated'));
+    async function fetchQueue() {
+      const { data, error } = await supabase
+        .from('issues')
+        .select('*')
+        .order('reported_at', { ascending: false })
+        .limit(100);
+
+      if (error) { console.error('Failed to fetch queue:', error); return; }
+      const items = data ?? [];
+      setIssues(items);
+      setEscalated(items.filter((i) => i.status === 'escalated'));
       setQueueLoading(false);
-    });
-    return unsub;
+    }
+    fetchQueue();
   }, []);
 
   // ── Derived Metrics ───────────────────────────────────────────────────────────
@@ -93,12 +97,12 @@ export default function AdminPage() {
       : `${Math.round((resolvedCount / totalReports) * 100)}%`;
 
   const resolvedWithTimestamps = issues.filter(
-    (i) => i.status === 'resolved' && i.resolvedAt != null && i.reportedAt != null
+    (i) => i.status === 'resolved' && i.resolved_at != null && i.reported_at != null
   );
   const avgTimeToResolve = (() => {
     if (resolvedWithTimestamps.length === 0) return null;
     const totalMs = resolvedWithTimestamps.reduce((sum, i) => {
-      return sum + (i.resolvedAt.toDate().getTime() - i.reportedAt.toDate().getTime());
+      return sum + (new Date(i.resolved_at).getTime() - new Date(i.reported_at).getTime());
     }, 0);
     return formatDuration(totalMs / resolvedWithTimestamps.length);
   })();
@@ -109,7 +113,8 @@ export default function AdminPage() {
     setEscalateMsg(null);
     setEscalateError(null);
     try {
-      const token = await user.getIdToken();
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
       const result = await triggerEscalation(token);
       setEscalateMsg(
         result.escalatedCount > 0
@@ -284,7 +289,7 @@ export default function AdminPage() {
                 <div
                   key={issue.id}
                   onClick={() => navigate(`/issues/${issue.id}`)}
-                  className="card-white p-3.5 sm:p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 transition-all duration-200 hover:scale-[1.01] hover:shadow-md cursor-pointer hover:border-[var(--color-plum-light)] hover:bg-[#F8F6F4] animate-fade-in"
+                  className="card-white p-3.5 sm:p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 transition-all duration-200 hover:scale-[1.01] hover:shadow-md cursor-pointer hover:border-plum-light hover:bg-[#F8F6F4] animate-fade-in"
                 >
                   {/* Issue info */}
                   <div className="flex-1 min-w-0">

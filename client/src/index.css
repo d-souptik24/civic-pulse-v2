@@ -705,30 +705,6 @@
     100% { transform: scale(0.85); opacity: 0.5; box-shadow: 0 0 0 0 currentColor; }
   }
 
-  /* ── Google Maps InfoWindow Overrides ───────────────────────────────── */
-  /* Style the popup to match Stone White / Ink civic design               */
-  .gm-style-iw-c {
-    background: transparent !important;
-    box-shadow: none !important;
-    padding: 0 !important;
-    border-radius: var(--radius-card) !important;
-  }
-  .gm-style-iw-d {
-    overflow: hidden !important;
-    padding: 0 !important;
-  }
-  .gm-style-iw-tc::after {
-    background: var(--color-stone-white) !important;
-  }
-  .gm-ui-hover-effect {
-    top: 6px !important;
-    right: 6px !important;
-    background-color: var(--color-stone-paper) !important;
-    border-radius: 50% !important;
-  }
-  .gm-ui-hover-effect span {
-    background-color: var(--color-fog) !important;
-  }
 
   /* ── Custom Scrollbars ───────────────────────────────────────────────── */
   ::-webkit-scrollbar        { width: 6px; height: 6px; }
@@ -743,11 +719,6 @@
   .scrollbar-hide::-webkit-scrollbar { display: none; }
   .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
-  /* ── Focus Ring Utility ─────────────────────────────────────────────── */
-  .focus-brand:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 2px rgba(75, 46, 70, 0.4);
-  }
 
   /* ── Hero Mobile Gradient Overlay ───────────────────────────────────── */
   /* On mobile, the robot image fills a portrait viewport and bleeds behind  */

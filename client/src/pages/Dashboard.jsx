@@ -1,14 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
-import { db } from '../lib/firebase.js';
+import { supabase } from '../lib/supabase.js';
 import { useNavigate } from 'react-router-dom';
 import { Map } from '../components/Map.jsx';
 import { getInsights } from '../lib/api.js';
-import { STATUS_CONFIG } from '../lib/constants.js';
 import { useAuth } from '../lib/AuthContext.jsx';
 import {
   AlertCircle, BrainCircuit, CheckCircle, Clock,
-  Loader2, TrendingUp, Zap, X, UserPlus, Sparkles
+  Loader2, TrendingUp, Zap, X, UserPlus
 } from 'lucide-react';
 
 const DEFAULT_CENTER = { lat: 28.6139, lng: 77.209 }; // Delhi
@@ -31,7 +29,7 @@ function FeedSkeleton() {
 
 function timeAgo(timestamp) {
   if (!timestamp) return 'just now';
-  const ms = Date.now() - (timestamp?.toMillis?.() ?? timestamp);
+  const ms = Date.now() - new Date(timestamp).getTime();
   const h = Math.floor(ms / 3600000);
   if (h < 1) return `${Math.floor(ms / 60000)}m ago`;
   if (h < 24) return `${h}h ago`;
@@ -126,12 +124,17 @@ export default function Dashboard() {
   const [insightLoading, setInsightLoading] = useState(false);
   const debounceRef = useRef(null);
 
-  // Real-time Firestore listener for all issues
+  // Fetch issues from Supabase
   useEffect(() => {
-    const q = query(collection(db, 'issues'), orderBy('reportedAt', 'desc'));
-    const unsub = onSnapshot(q, (snap) => {
-      const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      setIssues(data);
+    async function fetchIssues() {
+      const { data, error } = await supabase
+        .from('issues')
+        .select('*')
+        .order('reported_at', { ascending: false });
+
+      if (error) { console.error('Failed to fetch issues:', error); return; }
+
+      setIssues(data ?? []);
       setFeedLoading(false);
       setStats({
         total:     data.length,
@@ -139,8 +142,8 @@ export default function Dashboard() {
         resolved:  data.filter((i) => i.status === 'resolved').length,
         escalated: data.filter((i) => i.status === 'escalated').length,
       });
-    });
-    return unsub;
+    }
+    fetchIssues();
   }, []);
 
   // Pipeline 3: Auto-trigger insights on map center change
@@ -154,7 +157,8 @@ export default function Dashboard() {
       if (!isMounted) return;
       setInsightLoading(true);
       try {
-        const token = await user.getIdToken();
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
         const result = await getInsights(lat, lng, 5, token);
         if (isMounted) setInsight(result);
       } catch (err) {
@@ -195,7 +199,7 @@ export default function Dashboard() {
     >
       {/* Left: Map (70%) — styled as a framed card with thin padding and shadow */}
       <div 
-        className="w-full flex-none h-[55vh] xl:flex-[7] xl:h-auto min-w-0 relative rounded-2xl border shadow-report-card p-2 flex flex-col"
+        className="w-full flex-none h-[55vh] xl:flex-7 xl:h-auto min-w-0 relative rounded-2xl border shadow-report-card p-2 flex flex-col"
         style={{ 
           borderColor: 'var(--color-stone-line)',
           backgroundColor: 'var(--color-stone-white)'
@@ -298,7 +302,7 @@ export default function Dashboard() {
 
       {/* Right: Stats + Feed (30%) — light parchment sidebar */}
       <div
-        className="w-full flex-none xl:flex-[3] min-w-0 flex flex-col gap-4 overflow-hidden animate-fade-in"
+        className="w-full flex-none xl:flex-3 min-w-0 flex flex-col gap-4 overflow-hidden animate-fade-in"
         style={{
           backgroundColor: 'var(--color-stone-paper)',
           borderRadius: 'var(--radius-card)',
@@ -415,7 +419,7 @@ export default function Dashboard() {
                       <span
                         className="text-xs"
                         style={{ color: 'var(--color-fog)', fontFamily: 'var(--font-mono)', fontSize: '11px' }}
-                      >{timeAgo(issue.reportedAt)}</span>
+                      >{timeAgo(issue.reported_at || issue.reportedAt)}</span>
                       <span className="text-xs" style={{ color: 'var(--color-fog)' }}>👍 {issue.upvotes ?? 0}</span>
                       {issue.severity === 'high' && (
                         <span className="text-xs font-medium" style={{ color: 'var(--color-signal-red)' }}>⚠️ High</span>

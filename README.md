@@ -1,9 +1,9 @@
 <div align="center">
 
-<img src="https://img.shields.io/badge/Google_Cloud-Run-4285F4?style=for-the-badge&logo=googlecloud&logoColor=white" />
-<img src="https://img.shields.io/badge/Firebase-Firestore-FFCA28?style=for-the-badge&logo=firebase&logoColor=black" />
+<img src="https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" />
 <img src="https://img.shields.io/badge/Gemini-3.1_Flash_Lite-8E75B2?style=for-the-badge&logo=google&logoColor=white" />
 <img src="https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black" />
+<img src="https://img.shields.io/badge/Leaflet-1.9-199900?style=for-the-badge&logo=leaflet&logoColor=white" />
 
 <br /><br />
 
@@ -47,12 +47,17 @@ Every issue has a full public lifecycle. The community sees it, upvotes it, and 
 
 ## 🎯 How It Works — The Citizen Flow
 
-1. **Snap a photo** of a civic issue near you (pothole, broken light, waste dump, water leak)
-2. **AI analyses it** — category, severity, and authenticity are detected automatically
-3. **Drop a pin** on the map to geo-tag the exact location
-4. **Submit** — the issue appears live on the community map instantly
-5. **Community upvotes** raise the priority of important issues
-6. **Citizens resolve** by uploading a fix photo — AI verifies the fix is real before closing
+1. **Snap or upload a photo** of a civic problem (pothole, broken streetlight, waste dump, water leak).
+2. **AI analyses it** — Gemini detects category, severity, and verifies authentic civic evidence.
+3. **Smart 4-tier location tagging:**
+   - **Tier 1 (Photo EXIF):** Automatically reads embedded GPS coordinates from the photo's EXIF data.
+   - **Tier 2 (Device GPS):** Falls back to browser geolocation if photo metadata is missing.
+   - **Tier 3 (Address Search):** Search any locality or street via OpenStreetMap Nominatim with instant map fly-to.
+   - **Tier 4 (Interactive Pin):** Manual drag-and-drop pinpointing anywhere on the map.
+4. **Instant geo-deduplication check** — PostGIS queries a 200m radius to prevent duplicate tickets before saving.
+5. **Submit & track live** — The issue appears immediately on the public map.
+6. **Community upvotes** prioritize urgent local issues.
+7. **Resolution with AI proof** — Citizens or authorities submit a fix photo; Gemini compares before/after photos to confirm the fix before closing.
 
 ---
 
@@ -62,56 +67,127 @@ Every issue has a full public lifecycle. The community sees it, upvotes it, and 
 | ---------------- | ----------------------------------------------------------- |
 | **Landing Page** | Platform entry point, interactive walkthrough, live stats overview, and project info |
 | **Dashboard**    | Live issue map, stats, AI hotspot insights, recent activity |
-| **Report**       | Three-step wizard — photo, location, review & submit        |
+| **Report**       | Three-step wizard — photo, smart location, review & submit  |
 | **Issues**       | Full list, filterable by category, status, and area         |
-| **Issue Detail** | Complete timeline, upvotes, before/after photos             |
+| **Issue Detail** | Complete timeline, upvotes, dual-vision resolution proof    |
 | **Leaderboard**  | Top contributing citizens, points, and badges               |
-| **Admin Panel**  | Platform-wide analytics, escalation agent trigger, and escalated issue queue |
+| **Admin Panel**  | Platform-wide analytics, escalation agent trigger, and status management |
+
+---
 
 ## 👥 Roles & Permissions
 
 The application implements a secure role-based access control (RBAC) model split into three distinct user tiers:
 
-*   **Non-Authenticated Users (Public):** Can browse the interactive dashboard, view reported civic issues, inspect status updates and historical timelines, and view the global scoreboard/leaderboard.
-*   **Authenticated Citizens:** Can create new reports, upload photographs of civic problems, search for geo-deduplication, vote on existing reports (upvoting), and upload resolution photos to verify resolved issues via AI.
-*   **Administrators:** Have administrative privileges verified securely on the backend. Admins can manually update issue statuses (e.g., transitioning to "In Progress") and trigger the batch Autonomous Escalation Agent to compile reports for local authorities.
+*   **Public (Unauthenticated):** Browse interactive map, view issue details, track status history, and view the community leaderboard.
+*   **Authenticated Citizens:** Report issues with smart location, upvote open reports, and submit resolution photos with AI verification.
+*   **Administrators:** Securely manage issue lifecycles, change statuses, and trigger the Autonomous Escalation Agent.
 
 ---
 
 ## 🏆 Gamification & Leaderboard
 
 To encourage community engagement, CivicPulse rewards active participation with point and badge incentives:
-*   **Issue Reporting:** Citizens earn **50 points** for reporting a civic issue, with a **25-point bonus** (total 75 points) if the Gemini vision categorizer confirms the photo is an authentic civic problem.
-*   **Community Support:** Upvoting a critical local issue increments the original reporter's score by **10 points** to promote community validation. Removing an upvote automatically subtracts the points to ensure fair play.
-*   **AI Resolutions:** Uploading a successful verification photo that passes the Gemini resolution comparison closes the ticket and awards the reporter **100 points**.
-*   **Badges:** Unique, category-based achievements (such as *Pothole Patrol*, *Water Warden*, *Light Keeper*, *Upvote Champion*, and *Community Savior*) are automatically unlocked when citizens reach specific milestone thresholds.
+*   **Issue Reporting:** Citizens earn **50 points** for reporting, with a **25-point bonus** (total 75 points) when Gemini confirms photo authenticity.
+*   **Community Support:** Upvoting a critical local issue awards the reporter **10 points** to promote community validation. Removing an upvote adjusts points fairly.
+*   **AI Resolutions:** Uploading a fix photo that passes Gemini dual-vision comparison awards **100 points** and closes the issue.
+*   **Badges:** Category achievements (*Pothole Patrol*, *Water Warden*, *Light Keeper*, *Community Hero*) unlock upon reaching milestone thresholds.
 
 ---
 
-## 🛡️ Security & DevSecOps Architecture
+## 🛡️ Security Architecture
 
-The platform assumes a hostile client environment and enforces zero-trust security parameters:
-*   **Firestore Rules Lockdown:** Direct client-side write access to the main database is fully blocked. All issue creations and updates must go through the Express backend Admin SDK. User updates are guarded by strict schema checks that forbid modifying gamification fields (points, badges, counts) directly from the client.
-*   **Cryptographic Identity Verification:** Frontend requests do not specify user IDs. Instead, they attach Firebase ID Tokens (JWT) which the Express server cryptographically validates via Google's public keys. The client identity is resolved strictly from the decoded token payload (`req.user.uid`).
-*   **Storage Access Control:** Cloud Storage rules block file overrides and deletions by checking `allow update, delete: if false`. Creations are restricted to authenticated users uploading images under 10MB.
-*   **API Security & Rate Limiting:** All mutating routes are guarded by rate limiters to prevent DDoS and API token/billing quota exhaustion.
+*   **Row-Level Security (RLS):** Direct client-side access is secured by PostgreSQL RLS policies in Supabase.
+*   **Cryptographic Verification:** Express middleware validates Supabase JWTs cryptographically via `supabase.auth.getUser()`.
+*   **Privileged Backend:** Sensitive mutations run through Express using the Supabase Service Role Key.
+*   **Storage Access Control:** Supabase Storage bucket policies enforce file-type boundaries and authentication requirements.
+*   **Rate Limiting:** Express routes are guarded by rate limiters to prevent DDoS and runaway AI token costs.
 
 ---
 
-## ☁️ Deployment Architecture
+## 📂 Project Structure
 
-*   **Serverless Containerization:** The application is built using a multi-stage Docker build. Stage 1 compiles the React Vite client assets, which are then copied over to Stage 2 where a Node/Express server serves the static frontend alongside the API backend.
-*   **Google Cloud Run:** The unified Docker container is deployed to Google Cloud Run, allowing the platform to scale dynamically based on demand and scale to zero instances when idle to ensure zero baseline cost.
+```text
+├── client/                 # Frontend SPA (React 19 + Vite + Leaflet)
+│   ├── src/
+│   │   ├── components/     # Map, Navbar, Wizard steps, UI elements
+│   │   ├── hooks/          # Custom hooks (typewriter, etc.)
+│   │   ├── lib/            # Supabase client, AuthContext, API client
+│   │   ├── pages/          # Landing, Dashboard, Report, Issues, Admin, Leaderboard
+│   │   └── index.css       # Design token system (Vanilla CSS)
+├── server/                 # Express backend API & AI pipelines
+│   ├── routes/             # Issues, analyze, insights, escalate, verify
+│   ├── middleware/         # JWT auth & admin guard
+│   ├── lib/                # Supabase server client & token verification
+│   └── app.js              # Express app & /api/health endpoint
+├── api/                    # Vercel serverless function entry (api/index.js)
+├── .github/workflows/      # Automated keep-alive cron job for Supabase DB
+└── vercel.json             # Vercel deployment configuration
+```
 
 ---
 
 ## 🛠️ Built With
 
-- **Gemini 3.1 Flash Lite** — Multimodal AI for all 5 pipelines (Vision Categorizer, Deduplication, Hotspot Insights, Escalations, and Verification)
-- **Google Cloud Run** — Serverless backend and frontend hosting
-- **Firebase** — Firestore database, Cloud Storage, and Authentication (Google Sign-In)
-- **Google Maps JavaScript API** — Interactive dashboard map with status-colored custom pins
-- **React 19 + Node.js + Express 5** — Full-stack web application running in a unified Docker container
+- **Gemini 3.1 Flash Lite** — Multimodal vision analysis, authenticity verification, and dual-vision resolution checks
+- **Supabase & PostgreSQL + PostGIS** — Relational database, geospatial queries (`ST_DWithin`), and auth
+- **Leaflet & OpenStreetMap** — Interactive live map with custom status markers and Nominatim address search
+- **React 19 + Vite** — High-performance modern UI with client-side routing
+- **Vanilla CSS Tokens** — Custom design system without heavy framework runtime overhead
+- **Node.js + Express 5** — Backend REST API with Vercel serverless adapter
+
+---
+
+## 🚀 Quickstart & Local Setup
+
+### 1. Prerequisites
+- **Node.js** 20+ installed
+- A **Supabase** project (with PostGIS extension enabled)
+- A **Google Gemini API Key** (from Google AI Studio)
+
+### 2. Environment Variables
+
+Create `server/.env`:
+```env
+PORT=3001
+NODE_ENV=development
+GEMINI_API_KEY=your_gemini_api_key
+GEMINI_MODEL=gemini-3.1-flash-lite
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+```
+
+Create `client/.env`:
+```env
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+### 3. Install & Run
+
+In the **server** directory:
+```bash
+cd server
+npm install
+npm run dev     # Runs on http://localhost:3001
+```
+
+In the **client** directory (in a second terminal):
+```bash
+cd client
+npm install
+npm run dev     # Runs on http://localhost:5173
+```
+
+Open `http://localhost:5173` in your browser.
+
+---
+
+## 🌐 Deployment & Keep-Alive
+
+- **Frontend & API:** Pre-configured for **Vercel** with single-command deployment via `vercel.json` and `api/index.js`.
+- **Database Keep-Alive:** Includes a GitHub Actions cron job (`.github/workflows/keep-alive.yml`) that pings the Supabase database every 3 days to prevent automatic pauses on the free tier.
 
 ---
 

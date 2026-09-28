@@ -1,0 +1,50 @@
+name: Supabase Database Keep-Alive
+
+on:
+  schedule:
+    # Runs at 00:00 UTC every 3 days (Supabase free tier pauses after 7 days of inactivity)
+    - cron: '0 0 */3 * *'
+  workflow_dispatch: # Allows manual trigger from GitHub Actions tab to test anytime
+
+jobs:
+  keep-alive:
+    name: Ping Supabase Database
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase Database via PostgREST
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "::error::SUPABASE_URL or SUPABASE_ANON_KEY secret is missing in GitHub Repository Secrets!"
+            exit 1
+          fi
+
+          echo "Pinging Supabase database to reset 7-day inactivity timer..."
+          HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+            "$SUPABASE_URL/rest/v1/issues?select=id&limit=1")
+
+          echo "Supabase HTTP status: $HTTP_STATUS"
+          cat response.json
+          echo ""
+
+          if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
+            echo "✅ Successfully pinged Supabase PostgreSQL database."
+          else
+            echo "::error::Supabase ping failed with status $HTTP_STATUS"
+            exit 1
+          fi
+
+      - name: Ping Deployed App Health Endpoint (Optional)
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+        run: |
+          if [ -n "$APP_URL" ]; then
+            echo "Pinging deployed backend health check: $APP_URL/api/health..."
+            curl -s -f "$APP_URL/api/health" || echo "Warning: App URL ping failed, but Supabase database was already pinged."
+          else
+            echo "APP_URL secret not configured (optional). Skipping."
+          fi

@@ -1,54 +1,85 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { auth, googleProvider, db } from './firebase.js';
+import { supabase } from './supabase.js';
 
 const AuthContext = createContext(null);
 
+function formatUser(u, session) {
+  if (!u) return null;
+  const displayName = u.user_metadata?.full_name || u.user_metadata?.name || u.email?.split('@')[0] || 'Citizen';
+  const photoURL = u.user_metadata?.avatar_url || u.user_metadata?.picture || null;
+  return {
+    ...u,
+    uid: u.id,
+    id: u.id,
+    displayName,
+    photoURL,
+    getIdToken: async () => session?.access_token ?? (await supabase.auth.getSession()).data.session?.access_token ?? null,
+  };
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(undefined); // undefined = loading, null = logged out
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        // Read the cryptographically-signed Custom Claim from the Firebase ID token.
-        // This is the authoritative source for admin status — cannot be spoofed client-side.
-        try {
-          const idTokenResult = await firebaseUser.getIdTokenResult();
-          firebaseUser._isAdmin = !!idTokenResult.claims.admin;
-        } catch {
-          firebaseUser._isAdmin = false;
-        }
-        setUser(firebaseUser);
-        try {
-          // Upsert user profile in Firestore on every login
-          const userRef = doc(db, 'users', firebaseUser.uid);
-          await setDoc(userRef, {
-            id: firebaseUser.uid,
-            displayName: firebaseUser.displayName,
-            photoURL: firebaseUser.photoURL,
-            email: firebaseUser.email,
-            joinedAt: serverTimestamp(),
-          }, { merge: true }); // merge: true prevents overwriting points/badges
-        } catch (error) {
-          console.error("Failed to sync user profile to Firestore:", error);
-        }
+    // Get the current session on mount
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      setUser(formatUser(session?.user ?? null, session));
+      if (session?.user) {
+        const { data } = await supabase
+          .from('profiles')
+          .select('is_admin')
+          .eq('id', session.user.id)
+          .maybeSingle();
+        setIsAdmin(data?.is_admin === true);
       } else {
-        setUser(null);
+        setIsAdmin(false);
       }
     });
-    return unsubscribe;
+
+    // Listen for auth state changes (login, logout, token refresh)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      const formatted = formatUser(session?.user ?? null, session);
+      setUser(formatted);
+
+      // Upsert user profile and read back is_admin in a single query
+      if (session?.user) {
+        const { data: profile } = await supabase.from('profiles').upsert({
+          id:           session.user.id,
+          display_name: session.user.user_metadata?.full_name ?? session.user.email,
+          photo_url:    session.user.user_metadata?.avatar_url ?? null,
+          email:        session.user.email,
+        }, { onConflict: 'id' }).select('is_admin').maybeSingle();
+
+        setIsAdmin(profile?.is_admin === true);
+      } else {
+        setIsAdmin(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const signInWithGoogle = () => signInWithPopup(auth, googleProvider);
-  const logout = () => signOut(auth);
+  // Triggers the Google OAuth popup via Supabase Auth
+  const signInWithGoogle = () =>
+    supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin },
+    });
 
-  // Derived from the Custom Claim fetched on login — purely a UI convenience flag.
-  // All real enforcement happens on the backend via requireAdmin middleware.
-  const isAdmin = !!user?._isAdmin;
+  const logout = () => {
+    setIsAdmin(false);
+    return supabase.auth.signOut();
+  };
+
+  // Helper: get the current session's access token for API calls
+  const getToken = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token ?? null;
+  };
 
   return (
-    <AuthContext.Provider value={{ user, isAdmin, signInWithGoogle, logout }}>
+    <AuthContext.Provider value={{ user, isAdmin, signInWithGoogle, logout, getToken }}>
       {children}
     </AuthContext.Provider>
   );

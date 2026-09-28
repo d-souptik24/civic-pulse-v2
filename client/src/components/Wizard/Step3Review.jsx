@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Loader2, CheckCircle, AlertTriangle } from 'lucide-react';
-import { checkDuplicate, createIssue } from '../../lib/api';
-import { useAuth } from '../../lib/AuthContext';
+import { checkDuplicate, createIssue } from '../../lib/api.js';
+import { useAuth } from '../../lib/AuthContext.jsx';
 
 export default function Step3Review({ issueData, onBack }) {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { getToken } = useAuth();
 
   const [isChecking, setIsChecking] = useState(true);
   const [duplicateIssue, setDuplicateIssue] = useState(null);
@@ -19,7 +19,7 @@ export default function Step3Review({ issueData, onBack }) {
 
     const runCheck = async () => {
       try {
-        const token = await user.getIdToken();
+        const token = await getToken();
         const res = await checkDuplicate(issueData.location.lat, issueData.location.lng, issueData.category, token);
         if (mounted) {
           if (res.isDuplicate && res.duplicateId) {
@@ -35,13 +35,13 @@ export default function Step3Review({ issueData, onBack }) {
 
     runCheck();
     return () => { mounted = false; };
-  }, [issueData]);
+  }, [issueData, getToken]);
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
     setError(null);
     try {
-      const token = await user.getIdToken();
+      const token = await getToken();
       await createIssue({ ...issueData }, token);
       navigate('/');
     } catch (err) {
@@ -53,7 +53,7 @@ export default function Step3Review({ issueData, onBack }) {
 
   if (isChecking) {
     return (
-      <div className="card-white p-6 sm:p-12 flex flex-col items-center justify-center min-h-[300px] gap-4">
+      <div className="card-white p-6 sm:p-12 flex flex-col items-center justify-center min-h-75 gap-4">
         <Loader2 className="animate-spin" size={32} style={{ color: 'var(--color-plum)' }} />
         <p style={{ color: 'var(--color-fog)' }}>Checking for similar reports nearby...</p>
       </div>
@@ -164,7 +164,7 @@ export default function Step3Review({ issueData, onBack }) {
         <button
           onClick={handleSubmit}
           disabled={isSubmitting || !!duplicateIssue}
-          className="btn-primary flex-[2] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="btn-primary flex-2 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isSubmitting ? (
             <><Loader2 className="animate-spin" size={18} />Submitting...</>

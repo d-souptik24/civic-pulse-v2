@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   Eye, PlusCircle, ThumbsUp, Map, Sparkles,
   BrainCircuit, ChevronDown, Shield, Server, Database,
-  Globe, Copy, MapPin, CheckCircle
+  Globe, Copy, CheckCircle
 } from 'lucide-react';
 import { useTypewriter } from '../hooks/useTypewriter';
 
@@ -18,23 +18,22 @@ const VERBS = [
 
 const PIPELINES = [
   { name: 'Vision Categorizer & Authenticity Verifier', role: 'Parses images to classify issue, estimate severity, and detect fake or irrelevant reports.',              num: '01' },
-  { name: 'Geo-Deduplication Agent',                    role: 'Uses Geohashes to locate existing reports of the same category within 200m to prevent spam.',            num: '02' },
+  { name: 'Geo-Deduplication Agent',                    role: 'Uses PostGIS spatial queries to detect reports of the same category within 50m to prevent spam.',        num: '02' },
   { name: 'Predictive Hotspot Mapper',                  role: 'Analyzes spatial density clusters and queries Gemini for localized region-wide health insights.',        num: '03' },
   { name: 'Autonomous Escalation Agent',                role: 'Auto-detects stagnant popular issues, batches them, and drafts official civic emails.',                  num: '04' },
   { name: 'Dual-Vision Resolution Auditor',             role: 'Runs AI comparative visual diffs to audit resolved issues and execute point reward updates.',            num: '05' },
 ];
 
 const TECH = [
-  { icon: Sparkles, title: 'Gemini Flash Lite',  desc: 'Vision categorization & comparative visual audits at sub-second latency' },
-  { icon: Database, title: 'Firebase Firestore', desc: 'Real-time database with radius geospatial geohash queries' },
-  { icon: Globe,    title: 'Google Maps API',    desc: 'Dynamic coordinate mapping, heatmaps, and custom stone-paper style' },
-  { icon: Server,   title: 'Google Cloud Run',   desc: 'Scalable Express + React monorepo with zero cold-start penalty' },
+  { icon: Sparkles, title: 'Gemini Flash Lite',     desc: 'Vision categorization & comparative visual audits at sub-second latency' },
+  { icon: Database, title: 'Supabase & PostgreSQL', desc: 'Real-time database with PostGIS geospatial queries and Row-Level Security' },
+  { icon: Globe,    title: 'Leaflet & OpenStreetMap', desc: 'Lightweight, privacy-first interactive maps with custom civic styling' },
+  { icon: Server,   title: 'Node.js & Express',     desc: 'Modular REST API architecture with clean separation of concerns' },
 ];
 
 // ── Inline Logo — same as Navbar ──────────────────────────────────────────────
 function BrandLogo({ size = 'md', onDark = false }) {
   const iconSize = size === 'lg' ? 40 : 32;
-  const pinSize  = size === 'lg' ? 20 : 16;
   const textSize = size === 'lg' ? '22px' : '18px';
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -58,116 +57,6 @@ function BrandLogo({ size = 'md', onDark = false }) {
       }}>
         Civic<span style={{ color: onDark ? 'rgba(255,255,255,0.7)' : 'var(--color-plum)' }}>Pulse</span>
       </span>
-    </div>
-  );
-}
-
-// ── Stamped Case-ID Hero Visual (per DESIGN_IDEA_1 spec) ─────────────────────
-function HeroCaseStamp() {
-  return (
-    <div style={{
-      position: 'relative',
-      width: '100%',
-      maxWidth: '420px',
-      margin: '0 auto',
-    }}>
-      {/* Main stamp card — slightly rotated */}
-      <div style={{
-        backgroundColor: 'var(--color-stone-white)',
-        border: '1.5px dashed var(--color-stone-line)',
-        borderRadius: '12px',
-        padding: '36px 40px',
-        transform: 'rotate(-2deg)',
-        boxShadow: '0 8px 32px rgba(75, 46, 70, 0.12)',
-        position: 'relative',
-        zIndex: 2,
-      }}>
-        {/* FILED stamp overlay */}
-        <div style={{
-          position: 'absolute',
-          top: '18px',
-          right: '24px',
-          border: '2px solid rgba(62, 122, 84, 0.5)',
-          borderRadius: '4px',
-          padding: '3px 8px',
-          transform: 'rotate(8deg)',
-          color: 'rgba(62, 122, 84, 0.7)',
-          fontFamily: 'var(--font-mono)',
-          fontWeight: 700,
-          fontSize: '11px',
-          letterSpacing: '0.15em',
-        }}>FILED</div>
-
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--color-fog)', letterSpacing: '0.08em', marginBottom: '12px' }}>
-          CIVIC REPORT — NEW DELHI DISTRICT
-        </div>
-
-        <div style={{
-          fontFamily: 'var(--font-mono)',
-          fontWeight: 700,
-          fontSize: '28px',
-          color: 'var(--color-plum)',
-          letterSpacing: '-0.01em',
-          marginBottom: '8px',
-        }}>CP-2847</div>
-
-        <div style={{
-          fontFamily: 'var(--font-body)',
-          fontWeight: 600,
-          fontSize: '15px',
-          color: 'var(--color-ink)',
-          marginBottom: '6px',
-        }}>Severe road damage & potholes</div>
-
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--color-fog)' }}>
-          Mahadev Mandir Chowk · 28.6139° N
-        </div>
-
-        {/* Status bar */}
-        <div style={{
-          marginTop: '20px',
-          paddingTop: '16px',
-          borderTop: '1px solid var(--color-stone-line)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}>
-          <span style={{
-            backgroundColor: 'var(--color-signal-amber)',
-            color: 'var(--color-ink)',
-            fontFamily: 'var(--font-body)',
-            fontWeight: 600,
-            fontSize: '11px',
-            padding: '3px 8px',
-            borderRadius: '4px',
-            letterSpacing: '0.04em',
-            textTransform: 'uppercase',
-          }}>In Progress</span>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--color-fog)' }}>15d ago · 7 upvotes</span>
-        </div>
-      </div>
-
-      {/* Background card — slightly offset, peeking behind */}
-      <div style={{
-        position: 'absolute',
-        inset: 0,
-        backgroundColor: 'var(--color-stone-paper)',
-        border: '1.5px dashed var(--color-stone-line)',
-        borderRadius: '12px',
-        transform: 'rotate(2deg) translateY(6px)',
-        zIndex: 1,
-      }} aria-hidden="true" />
-
-      {/* Third card — furthest back */}
-      <div style={{
-        position: 'absolute',
-        inset: 0,
-        backgroundColor: 'rgba(75, 46, 70, 0.04)',
-        border: '1.5px dashed rgba(75, 46, 70, 0.12)',
-        borderRadius: '12px',
-        transform: 'rotate(-4deg) translateY(12px)',
-        zIndex: 0,
-      }} aria-hidden="true" />
     </div>
   );
 }
@@ -414,7 +303,7 @@ export default function LandingPage({ onGetStarted }) {
             }}>
               {displayed}
               {!done && (
-                <span className="inline-block w-[2px] h-[1em] bg-current align-middle ml-[1px] animate-blink" />
+                <span className="inline-block w-0.5 h-[1em] bg-current align-middle ml-px animate-blink" />
               )}
             </p>
 
@@ -509,7 +398,7 @@ export default function LandingPage({ onGetStarted }) {
             { num: '5',    label: 'Autonomous AI Pipelines' },
             { num: '200m', label: 'Geo-Deduplication Radius' },
             { num: '60s',  label: 'Report to Live Dashboard' },
-          ].map(({ num, label }, i) => (
+          ].map(({ num, label }) => (
             <div
               key={label}
               style={{

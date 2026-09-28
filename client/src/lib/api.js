@@ -3,7 +3,7 @@
  * All routes are relative (e.g. /api/issues) — Vite proxy forwards to port 3001 in dev.
  * In production, Express serves the built React app, so relative paths work natively.
  *
- * Mutating endpoints require a Firebase ID token for authentication.
+ * Mutating endpoints require a Supabase JWT session token for authentication.
  * Read-only / public endpoints (getInsights) do not require a token.
  */
 

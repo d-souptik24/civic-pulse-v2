@@ -1,9 +1,10 @@
-# ── Secrets ──────────────────────────────
-.env
-server/.env
-# (client/.env is explicitly ALLOWED so Vite can inline VITE_ variables during build)
-env.yaml
-*-firebase-adminsdk-*.json
+# ── Secrets & Private Keys ──────────────────────────────
+.env*
+server/.env*
+client/.env.local
+client/.env.production
+**/*.pem
+**/*.key
 
 # ── Dependencies (reinstalled during docker build) ───────────────────────────
 node_modules

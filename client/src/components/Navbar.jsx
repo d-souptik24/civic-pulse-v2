@@ -1,5 +1,5 @@
 import { NavLink, Link } from 'react-router-dom';
-import { AlertCircle, Trophy, Settings, LogIn, LogOut, Home, PlusCircle, MapPin } from 'lucide-react';
+import { AlertCircle, Trophy, Settings, LogIn, LogOut, Home, PlusCircle } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext.jsx';
 
 const navLinks = [
@@ -87,16 +87,33 @@ export default function Navbar() {
             // Logged in
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
-                <img
-                  src={user.photoURL}
-                  alt={user.displayName}
-                  className="navbar-avatar w-8 h-8 rounded-full shrink-0"
-                />
+                {user.photoURL ? (
+                  <img
+                    src={user.photoURL}
+                    alt={user.displayName || 'User profile'}
+                    referrerPolicy="no-referrer"
+                    className="navbar-avatar w-8 h-8 rounded-full shrink-0 object-cover"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                      const fallback = e.currentTarget.nextElementSibling;
+                      if (fallback) fallback.style.display = 'flex';
+                    }}
+                  />
+                ) : null}
+                <div
+                  className="navbar-avatar w-8 h-8 rounded-full shrink-0 items-center justify-center text-xs font-bold text-white uppercase select-none"
+                  style={{
+                    display: user.photoURL ? 'none' : 'flex',
+                    backgroundColor: 'var(--color-plum)',
+                  }}
+                >
+                  {(user.displayName || user.email || 'U')[0]}
+                </div>
                 <span
                   className="text-sm whitespace-nowrap hidden sm:block"
                   style={{ color: 'var(--color-ink)', fontWeight: 500 }}
                 >
-                  {user.displayName?.split(' ')[0]}
+                  {user.displayName?.split(' ')[0] || user.email?.split('@')[0]}
                 </span>
               </div>
               <button
@@ -140,7 +157,7 @@ export default function Navbar() {
             key={to}
             to={to}
             end={to === '/'}
-            className="mobile-nav-link flex flex-col items-center justify-center gap-1 flex-1 min-h-[44px] px-1 text-[10px] font-semibold transition-all duration-150 focus-visible:outline-none rounded-md hover:no-underline"
+            className="mobile-nav-link flex flex-col items-center justify-center gap-1 flex-1 min-h-11 px-1 text-[10px] font-semibold transition-all duration-150 focus-visible:outline-none rounded-md hover:no-underline"
             style={({ isActive }) => ({
               fontFamily: 'var(--font-body)',
               color: isActive ? 'var(--color-plum)' : 'var(--color-fog)',

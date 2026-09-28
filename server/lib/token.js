@@ -6,7 +6,7 @@
  * cannot forge `isAuthentic: true` in the issue-creation request.
  *
  * The token encodes: { isAuthentic, imageUrl, exp }
- * and is verified at POST /api/issues before any Firestore write.
+ * and is verified at POST /api/issues before any database write.
  */
 
 import crypto from 'crypto';

@@ -1,24 +1,29 @@
-import { auth } from '../lib/firebase-admin.js';
+import { supabase } from '../lib/supabase.js';
 
-async function makeAdmin(uid) {
-  if (!uid) {
-    console.error('Please provide a Firebase User ID (UID).');
-    console.log('Usage: node makeAdmin.js <uid>');
+async function makeAdmin(userId) {
+  if (!userId) {
+    console.error('Please provide a User ID (UUID).');
+    console.log('Usage: node makeAdmin.js <userId>');
     process.exit(1);
   }
 
   try {
-    // Set custom user claims
-    await auth.setCustomUserClaims(uid, { admin: true });
-    console.log(`Successfully granted admin privileges to user: ${uid}`);
-    
-    // Fetch the user to verify
-    const user = await auth.getUser(uid);
-    console.log('Current custom claims:', user.customClaims);
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({ is_admin: true })
+      .eq('id', userId)
+      .select('id, display_name, email, is_admin');
+
+    if (error) throw error;
+    if (!data || data.length === 0) {
+      console.warn(`No profile found with id: ${userId}. Ensure the user has signed in at least once.`);
+      return;
+    }
+    console.log(`Successfully granted admin privileges in Supabase profiles to:`, data[0]);
   } catch (error) {
-    console.error('Error granting admin privileges:', error);
+    console.error('Error granting admin privileges:', error.message);
   }
 }
 
-const uid = process.argv[2];
-makeAdmin(uid);
+const userId = process.argv[2];
+makeAdmin(userId);

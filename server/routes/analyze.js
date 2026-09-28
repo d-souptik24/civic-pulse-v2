@@ -1,13 +1,13 @@
-import express from 'express';
-import { callGemini, extractJSON, toInlineImage } from '../lib/gemini.js';
-import { signVerdict } from '../lib/token.js';
-import auth from '../middleware/auth.js';
+import express from "express";
+import { callGemini, extractJSON, toInlineImage } from "../lib/gemini.js";
+import { signVerdict } from "../lib/token.js";
+import auth from "../middleware/auth.js";
 
 const router = express.Router();
 
 // Pipeline 1: Vision Categorizer + Authenticity Verifier (merged)
 // POST /api/analyze
-// Receives: { imageUrl } 
+// Receives: { imageUrl }
 // Returns: { category, severity, title, description, isAuthentic, confidence, reasoning, verdictToken }
 
 const FALLBACK_DEFAULTS = {
@@ -17,7 +17,7 @@ const FALLBACK_DEFAULTS = {
   description: "AI analysis unavailable",
   isAuthentic: false,
   confidence: 0,
-  reasoning: null
+  reasoning: null,
 };
 
 // ── Per-user abuse counter ───────────────────────────────────────────────────
@@ -58,7 +58,7 @@ function resetAbuse(uid) {
   abuseMap.delete(uid);
 }
 
-router.post('/', auth, async (req, res) => {
+router.post("/", auth, async (req, res) => {
   const { imageUrl } = req.body;
   const uid = req.user.uid;
 
@@ -67,23 +67,24 @@ router.post('/', auth, async (req, res) => {
   if (abuse.blocked) {
     return res.status(429).json({
       error: `Too many rejected uploads. Please wait ${abuse.cooldownMinutes} minutes before trying again.`,
-      cooldownMinutes: abuse.cooldownMinutes
+      cooldownMinutes: abuse.cooldownMinutes,
     });
   }
-  
+
   if (!imageUrl) {
     return res.status(200).json({ ...FALLBACK_DEFAULTS, verdictToken: null });
   }
 
   try {
-    // 1. Fetch image from Firebase Storage URL
+    // 1. Fetch image from Supabase Storage URL
     const imgRes = await fetch(imageUrl);
-    if (!imgRes.ok) throw new Error(`Failed to fetch image: ${imgRes.statusText}`);
-    
+    if (!imgRes.ok)
+      throw new Error(`Failed to fetch image: ${imgRes.statusText}`);
+
     const arrayBuffer = await imgRes.arrayBuffer();
-    const base64 = Buffer.from(arrayBuffer).toString('base64');
-    const mimeType = imgRes.headers.get('content-type') || 'image/jpeg';
-    
+    const base64 = Buffer.from(arrayBuffer).toString("base64");
+    const mimeType = imgRes.headers.get("content-type") || "image/jpeg";
+
     // 2. Construct Prompt
     const prompt = `
 You are a civic issue analyzer for a hyperlocal problem-solving platform called CivicPulse.
@@ -104,25 +105,25 @@ Do NOT wrap the output in markdown code blocks. Output ONLY raw valid JSON.`;
       prompt,
       [toInlineImage(base64, mimeType)],
       15000,
-      'minimal'
+      "minimal",
     );
 
     // 4. Parse Response
     const data = extractJSON(textResponse);
     if (!data) {
-      console.error('Failed to parse Gemini response as JSON');
+      console.error("Failed to parse Gemini response as JSON");
       return res.status(200).json({ ...FALLBACK_DEFAULTS, verdictToken: null });
     }
-    
+
     // 5. Build result and sign verdict token
     const result = {
-      category: data.category || 'other',
+      category: data.category || "other",
       severity: data.severity || 3,
-      title: data.title || 'Reported Issue',
-      description: data.description || 'No description provided.',
+      title: data.title || "Reported Issue",
+      description: data.description || "No description provided.",
       isAuthentic: data.isAuthentic ?? true,
       confidence: data.confidence || 0.5,
-      reasoning: data.reasoning || null
+      reasoning: data.reasoning || null,
     };
 
     // 6. Track abuse if inauthentic, reset on authentic
@@ -135,15 +136,16 @@ Do NOT wrap the output in markdown code blocks. Output ONLY raw valid JSON.`;
     // 7. Sign the verdict — client must send this back at POST /api/issues
     const verdictToken = signVerdict({
       isAuthentic: result.isAuthentic,
-      imageUrl
+      imageUrl,
     });
 
     return res.status(200).json({ ...result, verdictToken });
-
   } catch (error) {
-    console.error('analyze.js error:', error);
+    console.error("analyze.js error:", error);
     // Timeout / 429 / Network Error path -> 503
-    return res.status(503).json({ error: "AI service temporarily unavailable. Please try again." });
+    return res
+      .status(503)
+      .json({ error: "AI service temporarily unavailable. Please try again." });
   }
 });
 

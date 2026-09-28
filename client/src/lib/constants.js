@@ -8,7 +8,7 @@
  *  1. STATUS_CONFIG   — keyed by issue.status string enum
  *                       (pending | unverified | open | in_progress | escalated | resolved)
  *
- *  2. STATUS_COLORS_HEX — same status keys but in raw HEX for Canvas / Google Maps
+ *  2. STATUS_COLORS_HEX — same status keys but in raw HEX for Canvas / Leaflet Map
  *
  *  3. VERDICT_COLORS  — keyed by boolean results from AI pipeline verdicts
  *                       (Pipeline 1 authenticity, Pipeline 5 resolution)
@@ -26,16 +26,7 @@ export const STATUS_CONFIG = {
   resolved:    { label: 'Resolved',    color: 'text-green-400',  bg: 'bg-green-400/10',  border: 'border-green-400/30'  },
 };
 
-// Convenience flat maps for components that only need text color or bg
-// (replaces the old separate STATUS_COLORS / STATUS_BG objects in Dashboard.jsx)
-export const STATUS_COLOR_CLASS = Object.fromEntries(
-  Object.entries(STATUS_CONFIG).map(([k, v]) => [k, v.color])
-);
-export const STATUS_BG_CLASS = Object.fromEntries(
-  Object.entries(STATUS_CONFIG).map(([k, v]) => [k, v.bg])
-);
-
-// ── 2. STATUS_COLORS_HEX (Canvas / Google Maps — NOT Tailwind) ────────────────
+// ── 2. STATUS_COLORS_HEX (Canvas / Leaflet Map — NOT Tailwind) ────────────────
 // Used exclusively by Map.jsx for marker fillColor.
 // Matches the Tailwind palette used in STATUS_CONFIG.
 export const STATUS_COLORS_HEX = {

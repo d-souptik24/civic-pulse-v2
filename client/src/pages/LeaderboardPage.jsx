@@ -1,6 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { collection, query, orderBy, limit, onSnapshot, doc } from 'firebase/firestore';
-import { db } from '../lib/firebase.js';
+import { supabase } from '../lib/supabase.js';
 import { useAuth } from '../lib/AuthContext.jsx';
 import { useNavigate } from 'react-router-dom';
 import confetti from 'canvas-confetti';
@@ -52,7 +51,7 @@ function StatCard({ label, value, icon: Icon, onClick }) {
       onClick={onClick}
       className={`card-white p-4 flex flex-col items-center gap-1 text-center transition-all duration-200 ${
         onClick 
-          ? 'cursor-pointer hover:scale-[1.03] hover:border-[var(--color-plum-light)] hover:shadow-md hover:bg-[#F8F6F4]' 
+          ? 'cursor-pointer hover:scale-[1.03] hover:border-plum-light hover:shadow-md hover:bg-[#F8F6F4]' 
           : 'cursor-default'
       }`}
     >
@@ -65,7 +64,7 @@ function StatCard({ label, value, icon: Icon, onClick }) {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function LeaderboardPage() {
-  const { user, isAdmin } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [topUsers, setTopUsers] = useState([]);
   const [myProfile, setMyProfile] = useState(null);
@@ -73,48 +72,39 @@ export default function LeaderboardPage() {
   const [loading, setLoading] = useState(true);
   const confettiFired = useRef(false);
 
-  // ── Real-time Top 10 Listener ─────────────────────────────────────────────
+  // Fetch top 10 users by points
   useEffect(() => {
-    const q = query(
-      collection(db, 'users'),
-      orderBy('points', 'desc'),
-      limit(10)
-    );
+    async function fetchLeaderboard() {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, display_name, photo_url, points, badges, issues_resolved')
+        .order('points', { ascending: false })
+        .limit(10);
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const users = snapshot.docs.map((doc, index) => ({
-        id: doc.id,
+      if (error) { console.error('Leaderboard fetch error:', error); setLoading(false); return; }
+      const users = (data ?? []).map((u, index) => ({
+        ...u,
         rank: index + 1,
-        ...doc.data(),
+        displayName: u.display_name,
+        photoURL: u.photo_url,
       }));
       setTopUsers(users);
       setLoading(false);
-    }, (error) => {
-      console.error('Leaderboard listener error:', error);
-      setLoading(false);
-    });
-
-    return unsubscribe;
+    }
+    fetchLeaderboard();
   }, []);
 
-  // ── Real-time Current User Profile Listener ───────────────────────────────
+  // Fetch current user's profile
   useEffect(() => {
     if (!user) return;
-
-    const userRef = doc(db, 'users', user.uid);
-    const unsubscribe = onSnapshot(userRef, (snap) => {
-      if (snap.exists()) {
-        setMyProfile(snap.data());
-      }
-    });
-
-    return unsubscribe;
+    supabase.from('profiles').select('*').eq('id', user.id).single()
+      .then(({ data }) => { if (data) setMyProfile(data); });
   }, [user]);
 
-  // ── Compute My Rank from Top 10 ───────────────────────────────────────────
+  // Compute my rank from top 10
   useEffect(() => {
     if (!user || topUsers.length === 0) return;
-    const found = topUsers.find(u => u.id === user.uid);
+    const found = topUsers.find(u => u.id === user.id);
     setMyRank(found ? found.rank : '10+');
   }, [user, topUsers]);
 
@@ -167,14 +157,32 @@ export default function LeaderboardPage() {
         {user && myProfile && (
           <div className="card-white p-4 sm:p-6 space-y-4">
             <div className="flex items-center gap-3">
-              <img
-                src={user.photoURL}
-                alt={user.displayName}
-                className="w-12 h-12 rounded-full shrink-0"
-                style={{ boxShadow: '0 0 0 2px var(--color-plum)' }}
-              />
+              {user.photoURL ? (
+                <img
+                  src={user.photoURL}
+                  alt={user.displayName || 'You'}
+                  referrerPolicy="no-referrer"
+                  className="w-12 h-12 rounded-full shrink-0 object-cover"
+                  style={{ boxShadow: '0 0 0 2px var(--color-plum)' }}
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                    const fallback = e.currentTarget.nextElementSibling;
+                    if (fallback) fallback.style.display = 'flex';
+                  }}
+                />
+              ) : null}
+              <div
+                className="w-12 h-12 rounded-full shrink-0 items-center justify-center font-bold text-white uppercase text-base select-none"
+                style={{
+                  display: user.photoURL ? 'none' : 'flex',
+                  backgroundColor: 'var(--color-plum)',
+                  boxShadow: '0 0 0 2px var(--color-plum)',
+                }}
+              >
+                {(user.displayName || user.email || 'U')[0]}
+              </div>
               <div>
-                <p className="font-semibold" style={{ color: 'var(--color-ink)' }}>{user.displayName}</p>
+                <p className="font-semibold" style={{ color: 'var(--color-ink)' }}>{user.displayName || user.email}</p>
                 <p className="text-sm" style={{ color: 'var(--color-fog)' }}>Your stats</p>
               </div>
               <div
@@ -260,20 +268,29 @@ export default function LeaderboardPage() {
                     {citizen.photoURL ? (
                       <img
                         src={citizen.photoURL}
-                        alt={citizen.displayName}
-                        className="w-10 h-10 rounded-full shrink-0"
+                        alt={citizen.displayName || 'Citizen'}
+                        referrerPolicy="no-referrer"
+                        className="w-10 h-10 rounded-full shrink-0 object-cover"
                         style={{ boxShadow: '0 0 0 1px var(--color-stone-line)' }}
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                          const fallback = e.currentTarget.nextElementSibling;
+                          if (fallback) fallback.style.display = 'flex';
+                        }}
                       />
-                    ) : (
-                      <div
-                        className="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
-                        style={{ backgroundColor: 'var(--color-stone-paper)', border: '1px solid var(--color-stone-line)' }}
-                      >
-                        <span className="font-semibold text-sm" style={{ color: 'var(--color-plum)' }}>
-                          {citizen.displayName?.[0] ?? '?'}
-                        </span>
-                      </div>
-                    )}
+                    ) : null}
+                    <div
+                      className="w-10 h-10 rounded-full shrink-0 items-center justify-center"
+                      style={{
+                        display: citizen.photoURL ? 'none' : 'flex',
+                        backgroundColor: 'var(--color-stone-paper)',
+                        border: '1px solid var(--color-stone-line)',
+                      }}
+                    >
+                      <span className="font-semibold text-sm" style={{ color: 'var(--color-plum)' }}>
+                        {(citizen.displayName || '?')[0]}
+                      </span>
+                    </div>
 
                     {/* Info */}
                     <div className="flex-1 min-w-0">

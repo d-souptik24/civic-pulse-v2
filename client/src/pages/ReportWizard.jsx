@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Lock } from 'lucide-react';
-import Step1Photo from '../components/Wizard/Step1Photo';
-import Step2Details from '../components/Wizard/Step2Details';
-import Step3Review from '../components/Wizard/Step3Review';
-import { useAuth } from '../lib/AuthContext';
+import Step1Photo from '../components/Wizard/Step1Photo.jsx';
+import Step2Details from '../components/Wizard/Step2Details.jsx';
+import Step3Review from '../components/Wizard/Step3Review.jsx';
+import { useAuth } from '../lib/AuthContext.jsx';
 
 export default function ReportWizard() {
   const navigate = useNavigate();

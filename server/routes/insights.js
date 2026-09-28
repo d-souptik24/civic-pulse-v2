@@ -1,84 +1,85 @@
 import express from 'express';
-import { db, FieldValue } from '../lib/firebase-admin.js';
-import * as geofire from 'geofire-common';
+import { supabase } from '../lib/supabase.js';
 import { callGemini } from '../lib/gemini.js';
 import auth from '../middleware/auth.js';
 
 const router = express.Router();
+
+/**
+ * Compute a ~10km grid cache key from coordinates.
+ * Rounds to 1 decimal place (~11km precision) — replaces the geofire geohash prefix.
+ * Example: lat=12.9716, lng=77.5946 → "12.97_77.59"
+ */
+function gridKey(lat, lng) {
+  return `${Math.round(lat * 100) / 100}_${Math.round(lng * 100) / 100}`;
+}
 
 // Pipeline 3: Predictive Hotspot Mapper
 // POST /api/insights
 router.post('/', auth, async (req, res) => {
   try {
     const { lat, lng } = req.body;
-    
+
     if (!lat || !lng) {
       return res.status(400).json({ error: 'Missing lat or lng' });
     }
 
-    // 1. Calculate Geohash Prefix (Length 5 covers ~4.9km x 4.9km)
-    const fullHash = geofire.geohashForLocation([lat, lng]);
-    const geohashPrefix = fullHash.slice(0, 5);
-    
-    const insightRef = db.collection('insights').doc(geohashPrefix);
+    const cacheKey = gridKey(lat, lng);
+    const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
-    // 2. Check Cache
-    const insightDoc = await insightRef.get();
-    if (insightDoc.exists) {
-      const data = insightDoc.data();
-      const ageMs = Date.now() - (data.lastUpdated?.toDate().getTime() || 0);
-      
-      // If cache is younger than 30 minutes, return it immediately
-      if (ageMs < 30 * 60 * 1000) {
+    // 1. Check cache
+    const { data: cached } = await supabase
+      .from('insights')
+      .select('insight, issue_count, last_updated')
+      .eq('geohash', cacheKey)
+      .single();
+
+    if (cached) {
+      const ageMs = Date.now() - new Date(cached.last_updated).getTime();
+      if (ageMs < CACHE_TTL_MS) {
         return res.json({
-          geohash: geohashPrefix,
-          insight: data.insight,
-          issueCount: data.issueCount,
-          cached: true
+          geohash: cacheKey,
+          insight: cached.insight,
+          issueCount: cached.issue_count,
+          cached: true,
         });
       }
     }
 
-    // 3. Cache Miss - Aggregate Data
-    // We use a string-prefix query to align perfectly with the cache boundary
-    const snapshot = await db.collection('issues')
-      .where('geohash', '>=', geohashPrefix)
-      .where('geohash', '<=', geohashPrefix + '\uf8ff')
-      .get();
+    // 2. Cache miss — query issues within ~5km using PostGIS
+    const { data: issues, error } = await supabase.rpc('find_nearby_issues', {
+      lat,
+      lng,
+      radius_meters: 5000, // 5km radius for insights (broader than dedup)
+      filter_category: null,
+      filter_status: null,
+    });
 
-    if (snapshot.empty) {
+    if (error) throw error;
+
+    if (!issues || issues.length === 0) {
       return res.json({
-        geohash: geohashPrefix,
-        insight: "No recent civic issues reported in this area.",
+        geohash: cacheKey,
+        insight: 'No recent civic issues reported in this area.',
         issueCount: 0,
-        cached: false
+        cached: false,
       });
     }
 
-    let stats = {
-      total: snapshot.size,
-      categories: {},
-      severities: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
-      open: 0,
-      resolved: 0
-    };
+    // 3. Aggregate stats
+    const stats = issues.reduce(
+      (acc, issue) => {
+        acc.total++;
+        const cat = issue.category || 'other';
+        acc.categories[cat] = (acc.categories[cat] || 0) + 1;
+        if (issue.status === 'resolved') acc.resolved++;
+        else acc.open++;
+        return acc;
+      },
+      { total: 0, categories: {}, open: 0, resolved: 0 }
+    );
 
-    snapshot.forEach(doc => {
-      const issue = doc.data();
-      
-      // Category count
-      const cat = issue.category || 'other';
-      stats.categories[cat] = (stats.categories[cat] || 0) + 1;
-      
-      // Severity count
-      if (issue.severity) stats.severities[issue.severity]++;
-      
-      // Status
-      if (issue.status === 'resolved') stats.resolved++;
-      else stats.open++;
-    });
-
-    // 4. Agentic Generation via Gemini
+    // 4. Generate insight via Gemini
     const prompt = `
 You are an expert civic AI analyzing a 5km city area.
 Here is the aggregated data for issues reported in this grid:
@@ -92,19 +93,19 @@ Provide a concise, 1-to-2 sentence analytical insight. Highlight the biggest pro
 
     const insightText = await callGemini(prompt, [], 15000, 'minimal');
 
-    // 5. Update Cache
-    await insightRef.set({
-      geohash: geohashPrefix,
+    // 5. Upsert cache
+    await supabase.from('insights').upsert({
+      geohash: cacheKey,
       insight: insightText.trim(),
-      issueCount: stats.total,
-      lastUpdated: FieldValue.serverTimestamp()
-    });
+      issue_count: stats.total,
+      last_updated: new Date().toISOString(),
+    }, { onConflict: 'geohash' });
 
     res.json({
-      geohash: geohashPrefix,
+      geohash: cacheKey,
       insight: insightText.trim(),
       issueCount: stats.total,
-      cached: false
+      cached: false,
     });
 
   } catch (error) {
