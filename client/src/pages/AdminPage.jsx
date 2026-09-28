@@ -8,15 +8,9 @@ import {
   TrendingUp, Zap, BarChart3, Timer
 } from 'lucide-react';
 import { STATUS_CONFIG } from '../lib/constants.js';
+import { timeAgo } from '../lib/utils.js';
 
-function timeAgo(timestamp) {
-  if (!timestamp) return 'just now';
-  const ms = Date.now() - new Date(timestamp).getTime();
-  const h = Math.floor(ms / 3600000);
-  if (h < 1) return `${Math.floor(ms / 60000)}m ago`;
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
-}
+
 
 function formatDuration(ms) {
   const hours = ms / (1000 * 60 * 60);

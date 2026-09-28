@@ -5,14 +5,7 @@ import auth from '../middleware/auth.js';
 
 const router = express.Router();
 
-/**
- * Compute a ~10km grid cache key from coordinates.
- * Rounds to 1 decimal place (~11km precision) — replaces the geofire geohash prefix.
- * Example: lat=12.9716, lng=77.5946 → "12.97_77.59"
- */
-function gridKey(lat, lng) {
-  return `${Math.round(lat * 100) / 100}_${Math.round(lng * 100) / 100}`;
-}
+
 
 // Pipeline 3: Predictive Hotspot Mapper
 // POST /api/insights
@@ -24,7 +17,7 @@ router.post('/', auth, async (req, res) => {
       return res.status(400).json({ error: 'Missing lat or lng' });
     }
 
-    const cacheKey = gridKey(lat, lng);
+    const cacheKey = `${Math.round(lat * 100) / 100}_${Math.round(lng * 100) / 100}`;
     const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
     // 1. Check cache

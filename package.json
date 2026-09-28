@@ -3,15 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "npm run build --prefix client",
-    "client:dev": "npm run dev --prefix client",
-    "server:dev": "npm run dev --prefix server",
-    "client:build": "npm run build --prefix client"
+    "build": "npm run build --prefix client"
   },
   "dependencies": {
     "@google/genai": "^2.10.0",
     "@supabase/supabase-js": "^2.116.0",
-    "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "express-rate-limit": "^8.5.2"

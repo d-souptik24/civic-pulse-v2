@@ -8,8 +8,10 @@ import {
   AlertCircle, BrainCircuit, CheckCircle, Clock,
   Loader2, TrendingUp, Zap, X, UserPlus
 } from 'lucide-react';
+import { timeAgo } from '../lib/utils.js';
 
 const DEFAULT_CENTER = { lat: 28.6139, lng: 77.209 }; // Delhi
+
 
 // ── Feed Skeleton ────────────────────────────────────────────────────────────
 function FeedSkeleton() {
@@ -27,14 +29,7 @@ function FeedSkeleton() {
   );
 }
 
-function timeAgo(timestamp) {
-  if (!timestamp) return 'just now';
-  const ms = Date.now() - new Date(timestamp).getTime();
-  const h = Math.floor(ms / 3600000);
-  if (h < 1) return `${Math.floor(ms / 60000)}m ago`;
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
-}
+
 
 // ── Guest Nudge Card ─────────────────────────────────────────────────────────
 function GuestNudgeCard({ onDismiss, onSignIn }) {

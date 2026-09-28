@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../lib/AuthContext.jsx';
 import { AlertCircle, CheckCircle, Clock, Filter, ThumbsUp } from 'lucide-react';
 import { STATUS_CONFIG } from '../lib/constants.js';
+import { timeAgo } from '../lib/utils.js';
 
 // ── Status + Category Configuration ───────────────────────────────────────────
 
@@ -42,14 +43,7 @@ const CATEGORY_EMOJI = {
 // Status styles for light-mode cards
 // STATUS_LIGHT removed — now imported as STATUS_CONFIG from lib/constants.js
 
-function timeAgo(timestamp) {
-  if (!timestamp) return 'just now';
-  const ms = Date.now() - new Date(timestamp).getTime();
-  const h = Math.floor(ms / 3600000);
-  if (h < 1) return `${Math.floor(ms / 60000)}m ago`;
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
-}
+
 
 // ── Issue Card ─────────────────────────────────────────────────────────────────
 function IssueCard({ issue, onClick }) {

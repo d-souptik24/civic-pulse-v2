@@ -8,6 +8,7 @@ import {
   ArrowLeft, CheckCircle, Clock, AlertCircle, Zap,
   ChevronRight, Upload, ShieldCheck, ShieldX, ThumbsUp, Loader2, Shield
 } from 'lucide-react';
+import { timeAgo } from '../lib/utils.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -33,14 +34,7 @@ function normalizeIssue(raw) {
   };
 }
 
-function timeAgo(timestamp) {
-  if (!timestamp) return 'just now';
-  const ms = Date.now() - new Date(timestamp).getTime();
-  const h = Math.floor(ms / 3600000);
-  if (h < 1) return `${Math.floor(ms / 60000)}m ago`;
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
-}
+
 
 function formatTimestamp(ts) {
   if (!ts) return '';

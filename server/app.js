@@ -1,5 +1,4 @@
 import express from 'express';
-import cors from 'cors';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
 import { supabase } from './lib/supabase.js';
@@ -15,12 +14,6 @@ app.set('trust proxy', 1);
 // Limit JSON body to 1mb — photos must be uploaded to Supabase Storage first;
 // only the resulting URL is sent here. Vercel enforces a 4.5mb hard cap anyway.
 app.use(express.json({ limit: '1mb' }));
-
-// CORS is only needed in local dev. In production, Vercel serves both the React
-// frontend and this API from the same origin so browsers never issue a CORS preflight.
-if (process.env.NODE_ENV !== 'production') {
-  app.use(cors());
-}
 
 // ── Rate Limiters ─────────────────────────────────────────────────────────────
 // Global limiter: prevents API DDoS and runaway Gemini token costs.
@@ -77,22 +70,3 @@ app.use((req, res, next) => {
   next();
 });
 
-// ── Standalone Docker Production Static Serving ──────────────────────────────
-import path from 'path';
-import { fileURLToPath } from 'url';
-import fs from 'fs';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const publicPath = path.join(__dirname, 'public');
-
-if (fs.existsSync(publicPath)) {
-  app.use(express.static(publicPath));
-  // SPA fallback for client-side routing
-  app.get(/(.*)/, (req, res, next) => {
-    if (req.path.startsWith('/api')) return next();
-    res.sendFile(path.join(publicPath, 'index.html'), (err) => {
-      if (err) next(err);
-    });
-  });
-}

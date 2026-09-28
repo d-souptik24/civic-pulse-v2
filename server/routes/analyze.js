@@ -26,7 +26,6 @@ const FALLBACK_DEFAULTS = {
 const abuseMap = new Map(); // uid → { count, firstRejectedAt }
 const ABUSE_MAX_REJECTIONS = 3;
 const ABUSE_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
-const ABUSE_COOLDOWN_MINUTES = 30;
 
 function checkAbuse(uid) {
   const entry = abuseMap.get(uid);
@@ -39,7 +38,7 @@ function checkAbuse(uid) {
   }
 
   if (entry.count >= ABUSE_MAX_REJECTIONS) {
-    return { blocked: true, cooldownMinutes: ABUSE_COOLDOWN_MINUTES };
+    return { blocked: true, cooldownMinutes: 30 };
   }
 
   return { blocked: false };
