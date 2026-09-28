@@ -4,6 +4,7 @@
 <img src="https://img.shields.io/badge/Gemini-3.1_Flash_Lite-8E75B2?style=for-the-badge&logo=google&logoColor=white" />
 <img src="https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black" />
 <img src="https://img.shields.io/badge/Leaflet-1.9-199900?style=for-the-badge&logo=leaflet&logoColor=white" />
+<img src="https://img.shields.io/badge/Vercel-Deployed-000000?style=for-the-badge&logo=vercel&logoColor=white" />
 
 <br /><br />
 
@@ -12,6 +13,16 @@
 ### AI-Powered Civic Issue Reporting & Resolution Platform
 
 _Built for the Vibe2Ship Hackathon — Problem Statement 2: Community Hero_
+
+<br />
+
+[![Live Demo](https://img.shields.io/badge/Live_Demo-civic--pulse--in.vercel.app-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://civic-pulse-in.vercel.app)
+[![API Health](https://img.shields.io/badge/API_Health-Active-3ECF8E?style=for-the-badge&logo=statuspage&logoColor=white)](https://civic-pulse-in.vercel.app/api/health)
+[![Supabase Keep-Alive](https://github.com/d-souptik24/civic-pulse-v2/actions/workflows/keep-alive.yml/badge.svg)](https://github.com/d-souptik24/civic-pulse-v2/actions/workflows/keep-alive.yml)
+
+<br />
+
+**🚀 Experience it live:** [https://civic-pulse-in.vercel.app](https://civic-pulse-in.vercel.app)
 
 </div>
 
@@ -186,8 +197,10 @@ Open `http://localhost:5173` in your browser.
 
 ## 🌐 Deployment & Keep-Alive
 
-- **Frontend & API:** Pre-configured for **Vercel** with single-command deployment via `vercel.json` and `api/index.js`.
-- **Database Keep-Alive:** Includes a GitHub Actions cron job (`.github/workflows/keep-alive.yml`) that pings the Supabase database every 3 days to prevent automatic pauses on the free tier.
+- **Live Production URL:** [https://civic-pulse-in.vercel.app](https://civic-pulse-in.vercel.app)
+- **Production API Health Check:** [https://civic-pulse-in.vercel.app/api/health](https://civic-pulse-in.vercel.app/api/health)
+- **Deployment Platform:** Deployed seamlessly on **Vercel** with global edge CDN for static assets and serverless execution for `/api/*` Express routes via `vercel.json` and `api/index.js`.
+- **Database Keep-Alive Automation:** Automated via GitHub Actions ([`.github/workflows/keep-alive.yml`](.github/workflows/keep-alive.yml)) running on a cron schedule (`0 0 */3 * *`) to ping the Supabase PostgreSQL database and ensure zero free-tier dormancy.
 
 ---
 
