@@ -8,7 +8,7 @@ import {
   ArrowLeft, CheckCircle, Clock, AlertCircle, Zap,
   ChevronRight, Upload, ShieldCheck, ShieldX, ThumbsUp, Loader2, Shield
 } from 'lucide-react';
-import { timeAgo } from '../lib/utils.js';
+import { timeAgo, parseLocation } from '../lib/utils.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -18,8 +18,10 @@ import { timeAgo } from '../lib/utils.js';
 
 function normalizeIssue(raw) {
   if (!raw) return null;
+  const parsedLoc = parseLocation(raw.location) || (raw.lat && raw.lng ? { lat: raw.lat, lng: raw.lng } : null);
   return {
     ...raw,
+    location:                parsedLoc,
     photoUrl:                raw.photo_url || raw.photoUrl,
     reportedAt:              raw.reported_at || raw.reportedAt,
     upvotedBy:               raw.upvoted_by || raw.upvotedBy || [],
@@ -401,7 +403,7 @@ export default function IssueDetail() {
                   <img
                     src={resolutionPreview}
                     alt="Resolution photo preview"
-                    className="w-full rounded-xl object-cover aspect-video border border-[#00D4AA]/30"
+                    className="w-full rounded-xl object-cover aspect-video border border-green-500/30"
                   />
                 </div>
               )}
@@ -503,10 +505,10 @@ export default function IssueDetail() {
 
                     {/* Upload progress */}
                     {isVerifying && uploadProgress > 0 && uploadProgress < 100 && (
-                      <div className="w-full bg-slate-700 rounded-full h-1.5">
+                      <div className="w-full rounded-full h-1.5" style={{ backgroundColor: 'var(--color-stone-line)' }}>
                         <div
-                          className="bg-[#00D4AA] h-1.5 rounded-full transition-all duration-300"
-                          style={{ width: `${uploadProgress}%` }}
+                          className="h-1.5 rounded-full transition-all duration-300"
+                          style={{ width: `${uploadProgress}%`, backgroundColor: 'var(--color-plum)' }}
                         />
                       </div>
                     )}
@@ -514,7 +516,8 @@ export default function IssueDetail() {
                     <button
                       onClick={handleVerifyResolution}
                       disabled={isVerifying}
-                      className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[#00D4AA] hover:bg-[#00BF97] text-slate-900 text-sm font-bold transition-all disabled:opacity-60 disabled:cursor-not-allowed hover:scale-105 active:scale-95"
+                      className="btn-primary w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                      style={{ backgroundColor: 'var(--color-signal-green)', color: '#ffffff' }}
                     >
                       {isVerifying ? (
                         <>
@@ -571,11 +574,11 @@ export default function IssueDetail() {
                 <span style={{ color: 'var(--color-fog)' }}>Reported</span>
                 <span style={{ color: 'var(--color-ink)', fontWeight: 500 }}>{formatTimestamp(issue.reportedAt) || '—'}</span>
               </div>
-              {issue.location && (
+              {issue.location && issue.location.lat != null && issue.location.lng != null && (
                 <div className="flex justify-between">
                   <span style={{ color: 'var(--color-fog)' }}>Coordinates</span>
                   <span style={{ color: 'var(--color-ink)', fontWeight: 500 }}>
-                    {issue.location.lat?.toFixed(4)}, {issue.location.lng?.toFixed(4)}
+                    {issue.location.lat.toFixed(4)}, {issue.location.lng.toFixed(4)}
                   </span>
                 </div>
               )}

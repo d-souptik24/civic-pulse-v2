@@ -18,7 +18,7 @@ const VERBS = [
 
 const PIPELINES = [
   { name: 'Vision Categorizer & Authenticity Verifier', role: 'Parses images to classify issue, estimate severity, and detect fake or irrelevant reports.',              num: '01' },
-  { name: 'Geo-Deduplication Agent',                    role: 'Uses PostGIS spatial queries to detect reports of the same category within 50m to prevent spam.',        num: '02' },
+  { name: 'Geo-Deduplication Agent',                    role: 'Uses PostGIS spatial queries to detect reports of the same category within 200m to prevent spam.',       num: '02' },
   { name: 'Predictive Hotspot Mapper',                  role: 'Analyzes spatial density clusters and queries Gemini for localized region-wide health insights.',        num: '03' },
   { name: 'Autonomous Escalation Agent',                role: 'Auto-detects stagnant popular issues, batches them, and drafts official civic emails.',                  num: '04' },
   { name: 'Dual-Vision Resolution Auditor',             role: 'Runs AI comparative visual diffs to audit resolved issues and execute point reward updates.',            num: '05' },

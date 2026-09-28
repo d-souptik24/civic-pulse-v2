@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from 'react-leaflet';
 import { Locate } from 'lucide-react';
 import { STATUS_COLORS_HEX } from '../lib/constants.js';
+import { parseLocation } from '../lib/utils.js';
 import 'leaflet/dist/leaflet.css';
 
 const DEFAULT_CENTER = [28.6139, 77.2090]; // Delhi [lat, lng]
@@ -76,10 +77,10 @@ export function Map({ issues = [], onIssueClick, onCenterChange }) {
 
         {/* Issue markers */}
         {issues.map((issue) => {
-          // Handle PostGIS location format OR legacy { lat, lng } object
-          const lat = issue.location?.lat ?? issue.lat;
-          const lng = issue.location?.lng ?? issue.lng;
-          if (!lat || !lng) return null;
+          // Handle PostGIS location (EWKB/WKT) OR legacy { lat, lng } object
+          const loc = parseLocation(issue.location) || (issue.lat && issue.lng ? { lat: issue.lat, lng: issue.lng } : null);
+          if (!loc) return null;
+          const { lat, lng } = loc;
 
           const color = STATUS_COLORS_HEX[issue.status] ?? STATUS_COLORS_HEX.open;
           const radius = (issue.upvotes ?? 0) >= 5 ? 12 : 9;

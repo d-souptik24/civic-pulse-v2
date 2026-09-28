@@ -75,7 +75,11 @@ export default function AdminPage() {
         .limit(100);
 
       if (error) { console.error('Failed to fetch queue:', error); return; }
-      const items = data ?? [];
+      const items = (data ?? []).map((i) => ({
+        ...i,
+        reportedAt: i.reported_at || i.reportedAt,
+        aiEscalationSummary: i.ai_escalation_summary || i.aiEscalationSummary,
+      }));
       setIssues(items);
       setEscalated(items.filter((i) => i.status === 'escalated'));
       setQueueLoading(false);
