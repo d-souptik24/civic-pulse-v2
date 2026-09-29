@@ -124,7 +124,8 @@ export default function Dashboard() {
     async function fetchIssues() {
       const { data, error } = await supabase
         .from('issues')
-        .select('*')
+        // Only columns used by feed cards and map markers — avoids heavy JSONB blobs
+        .select('id, title, status, category, location, upvotes, severity, reported_at')
         .order('reported_at', { ascending: false });
 
       if (error) { console.error('Failed to fetch issues:', error); return; }
@@ -192,6 +193,7 @@ export default function Dashboard() {
       className="flex flex-col xl:flex-row pt-16 xl:pt-20 pb-20 xl:pb-4 px-4 gap-4 min-h-screen xl:h-screen animate-fade-in"
       style={{ backgroundColor: 'var(--color-stone-paper)' }}
     >
+      <h1 className="sr-only">CivicPulse — Live Map & Community Issues Feed</h1>
       {/* Left: Map (70%) — styled as a framed card with thin padding and shadow */}
       <div 
         className="w-full flex-none h-[55vh] xl:flex-7 xl:h-auto min-w-0 relative rounded-2xl border shadow-report-card p-2 flex flex-col"

@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import Navbar from './components/Navbar.jsx';
+import ErrorBoundary from './components/ErrorBoundary.jsx';
 import { useFirstVisit } from './lib/useFirstVisit.js';
 
 // Route code-splitting (Vercel React Best Practices: bundle-dynamic-imports)
@@ -32,25 +33,27 @@ export default function App() {
     <BrowserRouter>
       {hasVisited && <Navbar />}
       <main className={hasVisited ? '' : 'overflow-hidden'}>
-        <Suspense fallback={<RouteLoader />}>
-          <Routes>
-            <Route
-              path="/"
-              element={
-                hasVisited ? (
-                  <Dashboard />
-                ) : (
-                  <LandingPage onGetStarted={markVisited} />
-                )
-              }
-            />
-            <Route path="/report"      element={<ReportWizard />} />
-            <Route path="/issues"      element={<IssuesList />} />
-            <Route path="/issues/:id"  element={<IssueDetail />} />
-            <Route path="/leaderboard" element={<LeaderboardPage />} />
-            <Route path="/admin"       element={<AdminPage />} />
-          </Routes>
-        </Suspense>
+        <ErrorBoundary>
+          <Suspense fallback={<RouteLoader />}>
+            <Routes>
+              <Route
+                path="/"
+                element={
+                  hasVisited ? (
+                    <Dashboard />
+                  ) : (
+                    <LandingPage onGetStarted={markVisited} />
+                  )
+                }
+              />
+              <Route path="/report"      element={<ReportWizard />} />
+              <Route path="/issues"      element={<IssuesList />} />
+              <Route path="/issues/:id"  element={<IssueDetail />} />
+              <Route path="/leaderboard" element={<LeaderboardPage />} />
+              <Route path="/admin"       element={<AdminPage />} />
+            </Routes>
+          </Suspense>
+        </ErrorBoundary>
       </main>
     </BrowserRouter>
   );

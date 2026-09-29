@@ -59,3 +59,12 @@ export function parseLocation(loc) {
   return null;
 }
 
+/**
+ * Formats a UUID into a human-friendly civic reference code.
+ * UUID format is 8-4-4-4-12, so the first 8 characters are always the clean prefix.
+ * e.g. "bf393688-56f5-4bc1-a0f4-3bc4eb9e7266" -> "CP-BF393688"
+ */
+export function formatTicketId(id) {
+  return id ? `CP-${String(id).slice(0, 8).toUpperCase()}` : '';
+}
+

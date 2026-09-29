@@ -1,6 +1,7 @@
 import express from 'express';
 import { supabase } from '../lib/supabase.js';
 import { callGemini } from '../lib/gemini.js';
+import { isValidCoordinate } from '../lib/validation.js';
 import auth from '../middleware/auth.js';
 
 const router = express.Router();
@@ -13,8 +14,8 @@ router.post('/', auth, async (req, res) => {
   try {
     const { lat, lng } = req.body;
 
-    if (!lat || !lng) {
-      return res.status(400).json({ error: 'Missing lat or lng' });
+    if (!isValidCoordinate(lat, lng)) {
+      return res.status(400).json({ error: 'Missing or invalid coordinates' });
     }
 
     const cacheKey = `${Math.round(lat * 100) / 100}_${Math.round(lng * 100) / 100}`;

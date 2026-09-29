@@ -6,9 +6,10 @@ import { verifyResolution, upvoteIssue, updateIssueStatus } from '../lib/api.js'
 import { STATUS_CONFIG, VERDICT_COLORS } from '../lib/constants.js';
 import {
   ArrowLeft, CheckCircle, Clock, AlertCircle, Zap,
-  ChevronRight, Upload, ShieldCheck, ShieldX, ThumbsUp, Loader2, Shield
+  ChevronRight, Upload, ShieldCheck, ShieldX, ThumbsUp, Loader2, Shield,
+  Share2, Check
 } from 'lucide-react';
-import { timeAgo, parseLocation } from '../lib/utils.js';
+import { timeAgo, parseLocation, formatTicketId } from '../lib/utils.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -98,9 +99,37 @@ export default function IssueDetail() {
   const [actionError, setActionError]               = useState(null);
   const [isMarkingProgress, setIsMarkingProgress]   = useState(false);
   const [isUpvoting, setIsUpvoting]                 = useState(false);
+  const [copied, setCopied]                         = useState(false);
 
   const fileInputRef = useRef();
   const prevPreviewRef = useRef();
+
+  // ── Share / Copy Issue Link ──────────────────────────────────────────────────
+  const handleShare = async () => {
+    const ticketCode = formatTicketId(id);
+    const shareData = {
+      title: `CivicPulse [${ticketCode}]: ${issue?.title || 'Civic Issue'}`,
+      text: `Civic report #${ticketCode}: ${issue?.title || ''}. Check details and upvote on CivicPulse:`,
+      url: window.location.href,
+    };
+
+    if (navigator.canShare?.(shareData)) {
+      try {
+        await navigator.share(shareData);
+        return;
+      } catch {
+        // Fallback to clipboard if share cancelled
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      console.warn('Clipboard write failed');
+    }
+  };
 
   // ── Fetch issue from Supabase ───────────────────────────────────────────────────
   useEffect(() => {
@@ -294,20 +323,53 @@ export default function IssueDetail() {
 
   return (
     <div className="min-h-screen pt-20 pb-24 md:pb-8 px-4 max-w-5xl mx-auto animate-fade-in">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
+      {/* Header with Breadcrumb, Ticket Ref, and Share Button */}
+      <div className="flex items-center justify-between gap-3 mb-6 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => navigate(-1)}
+            className="flex items-center gap-1.5 transition-colors text-sm"
+            style={{ color: 'var(--color-fog)' }}
+            onMouseEnter={e => e.currentTarget.style.color = 'var(--color-ink)'}
+            onMouseLeave={e => e.currentTarget.style.color = 'var(--color-fog)'}
+          >
+            <ArrowLeft size={16} />
+            Back
+          </button>
+          <ChevronRight size={14} style={{ color: 'var(--color-stone-line)' }} />
+          <span className="text-sm capitalize" style={{ color: 'var(--color-fog)' }}>{issue.category?.replace('_', ' ')}</span>
+          <ChevronRight size={14} style={{ color: 'var(--color-stone-line)' }} />
+          <span
+            className="font-mono text-xs px-2.5 py-0.5 rounded font-bold tracking-wide"
+            style={{
+              backgroundColor: 'rgba(75, 46, 70, 0.08)',
+              color: 'var(--color-plum)',
+              border: '1px solid rgba(75, 46, 70, 0.18)',
+            }}
+          >
+            Ticket #{formatTicketId(issue.id)}
+          </span>
+        </div>
+
+        {/* Share Button */}
         <button
-          onClick={() => navigate(-1)}
-          className="flex items-center gap-1.5 transition-colors text-sm"
-          style={{ color: 'var(--color-fog)' }}
-          onMouseEnter={e => e.currentTarget.style.color = 'var(--color-ink)'}
-          onMouseLeave={e => e.currentTarget.style.color = 'var(--color-fog)'}
+          id="btn-share-issue"
+          onClick={handleShare}
+          className="btn-secondary flex items-center gap-1.5 text-xs py-1.5 px-3 transition-all"
+          title="Share or copy link for this issue"
         >
-          <ArrowLeft size={16} />
-          Back
+          {copied ? (
+            <>
+              <Check size={13} style={{ color: 'var(--color-signal-green)' }} />
+              <span style={{ color: 'var(--color-signal-green)', fontWeight: 600 }}>Link Copied!</span>
+            </>
+          ) : (
+            <>
+              <Share2 size={13} />
+              <span>Share Issue</span>
+            </>
+          )}
         </button>
-        <ChevronRight size={14} style={{ color: 'var(--color-stone-line)' }} />
-        <span className="text-sm capitalize" style={{ color: 'var(--color-fog)' }}>{issue.category?.replace('_', ' ')}</span>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -562,6 +624,12 @@ export default function IssueDetail() {
           <div className="glass-card p-4 sm:p-5">
             <h3 className="text-sm font-semibold uppercase tracking-wider mb-4" style={{ color: 'var(--color-fog)' }}>Details</h3>
             <div className="space-y-2.5 text-xs">
+              <div className="flex justify-between items-center">
+                <span style={{ color: 'var(--color-fog)' }}>Ticket Ref</span>
+                <span className="font-mono font-bold" style={{ color: 'var(--color-plum)' }}>
+                  {formatTicketId(issue.id)}
+                </span>
+              </div>
               <div className="flex justify-between">
                 <span style={{ color: 'var(--color-fog)' }}>Category</span>
                 <span className="capitalize" style={{ color: 'var(--color-ink)', fontWeight: 500 }}>{issue.category?.replace('_', ' ') || '—'}</span>

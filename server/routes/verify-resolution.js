@@ -1,6 +1,7 @@
 import express from 'express';
 import { supabase } from '../lib/supabase.js';
 import { callGemini, extractJSON, toInlineImage } from '../lib/gemini.js';
+import { isValidStorageUrl } from '../lib/validation.js';
 import auth from '../middleware/auth.js';
 
 const router = express.Router();
@@ -16,16 +17,26 @@ router.post('/', auth, async (req, res) => {
     return res.status(400).json({ error: 'Missing issueId or resolvedPhotoUrl' });
   }
 
+  // SSRF Protection: Validate that the resolved photo URL points to authorized Supabase Storage
+  if (!isValidStorageUrl(resolvedPhotoUrl)) {
+    return res.status(400).json({ error: 'Invalid or unauthorized resolvedPhotoUrl' });
+  }
+
   try {
-    // 1. Fetch the issue to get the original "before" photo
+    // 1. Fetch the issue to get status, history, and the original "before" photo
     const { data: issue, error: fetchError } = await supabase
       .from('issues')
-      .select('photo_url, reported_by')
+      .select('photo_url, reported_by, status, status_history')
       .eq('id', issueId)
       .single();
 
     if (fetchError || !issue) {
       return res.status(404).json({ error: 'Issue not found' });
+    }
+
+    // Business Logic Protection: Prevent double-resolving and infinite point farming
+    if (issue.status === 'resolved') {
+      return res.status(400).json({ error: 'This issue has already been resolved.' });
     }
 
     if (!issue.photo_url) {

@@ -7,8 +7,7 @@ import {
   AlertCircle, CheckCircle, Clock, ExternalLink, Loader2,
   TrendingUp, Zap, BarChart3, Timer
 } from 'lucide-react';
-import { STATUS_CONFIG } from '../lib/constants.js';
-import { timeAgo } from '../lib/utils.js';
+import { timeAgo, formatTicketId } from '../lib/utils.js';
 
 
 
@@ -291,7 +290,13 @@ export default function AdminPage() {
                 >
                   {/* Issue info */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-3 mb-1.5 flex-wrap">
+                    <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                      <span
+                        className="font-mono text-[10px] px-1.5 py-0.5 rounded font-bold tracking-wider"
+                        style={{ backgroundColor: 'rgba(75, 46, 70, 0.08)', color: 'var(--color-plum)' }}
+                      >
+                        #{formatTicketId(issue.id)}
+                      </span>
                       <p className="text-sm font-semibold truncate" style={{ color: 'var(--color-ink)' }}>
                         {issue.title}
                       </p>

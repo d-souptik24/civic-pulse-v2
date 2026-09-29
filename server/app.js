@@ -15,6 +15,14 @@ app.set('trust proxy', 1);
 // only the resulting URL is sent here. Vercel enforces a 4.5mb hard cap anyway.
 app.use(express.json({ limit: '1mb' }));
 
+// ── Security Headers ──────────────────────────────────────────────────────────
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
+
 // ── Rate Limiters ─────────────────────────────────────────────────────────────
 // Global limiter: prevents API DDoS and runaway Gemini token costs.
 const apiLimiter = rateLimit({
@@ -34,8 +42,18 @@ const analyzeLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Dedicated limiter on dual-vision resolution verification
+const verifyLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 15,
+  message: { error: 'Too many verification requests. Please wait before trying again.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 app.use('/api/', apiLimiter);
 app.use('/api/analyze', analyzeLimiter);
+app.use('/api/verify-resolution', verifyLimiter);
 
 // ── API Routes ────────────────────────────────────────────────────────────────
 import analyzeRouter from './routes/analyze.js';
@@ -53,7 +71,7 @@ app.use('/api/verify-resolution', verifyResolutionRouter);
 // ── Health Check (Database Keep-Alive) ─────────────────────────────────────────
 app.get('/api/health', async (_req, res) => {
   try {
-    const { data, error } = await supabase.from('issues').select('id').limit(1);
+    const { error } = await supabase.from('issues').select('id').limit(1);
     if (error) throw error;
     res.status(200).json({ status: 'ok', timestamp: new Date().toISOString(), database: 'connected' });
   } catch (err) {

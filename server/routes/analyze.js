@@ -1,6 +1,7 @@
 import express from "express";
 import { callGemini, extractJSON, toInlineImage } from "../lib/gemini.js";
 import { signVerdict } from "../lib/token.js";
+import { isValidStorageUrl } from "../lib/validation.js";
 import auth from "../middleware/auth.js";
 
 const router = express.Router();
@@ -72,6 +73,11 @@ router.post("/", auth, async (req, res) => {
 
   if (!imageUrl) {
     return res.status(200).json({ ...FALLBACK_DEFAULTS, verdictToken: null });
+  }
+
+  // SSRF Protection: Validate that the URL points to authorized Supabase Storage
+  if (!isValidStorageUrl(imageUrl)) {
+    return res.status(400).json({ error: 'Invalid or unauthorized image URL' });
   }
 
   try {

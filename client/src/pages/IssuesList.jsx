@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { useAuth } from '../lib/AuthContext.jsx';
 import { AlertCircle, CheckCircle, Clock, Filter, ThumbsUp } from 'lucide-react';
 import { STATUS_CONFIG } from '../lib/constants.js';
-import { timeAgo } from '../lib/utils.js';
+import { timeAgo, formatTicketId } from '../lib/utils.js';
 
 // ── Status + Category Configuration ───────────────────────────────────────────
 
@@ -79,12 +79,20 @@ function IssueCard({ issue, onClick }) {
         )}
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2 mb-1">
-            <p
-              className="text-sm font-semibold leading-tight line-clamp-2 transition-colors"
-              style={{ color: 'var(--color-ink)' }}
-            >
-              {issue.title}
-            </p>
+            <div className="min-w-0">
+              <span
+                className="font-mono text-[10px] px-1.5 py-0.5 rounded font-bold tracking-wider inline-block mb-1"
+                style={{ backgroundColor: 'rgba(75, 46, 70, 0.08)', color: 'var(--color-plum)' }}
+              >
+                #{formatTicketId(issue.id)}
+              </span>
+              <p
+                className="text-sm font-semibold leading-tight line-clamp-2 transition-colors"
+                style={{ color: 'var(--color-ink)' }}
+              >
+                {issue.title}
+              </p>
+            </div>
             <span
               className={`text-[10px] px-2 py-0.5 shrink-0 font-semibold uppercase tracking-wider rounded-full border ${cfg.color} ${cfg.bg} ${cfg.border}`}
             >
@@ -130,29 +138,38 @@ export default function IssuesList() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [catFilter, setCatFilter]       = useState('all');
   const [searchParams] = useSearchParams();
-  const reporterFilter = searchParams.get('reporter');
-  const targetName = searchParams.get('name');
-  const { user, isAdmin } = useAuth();
+  const location = useLocation();
+  // Reporter filter: prefer location.state (private, not in URL) → fallback to ?reporter=me
+  const stateReporterId = location.state?.reporterId ?? null;
+  const reporterName    = location.state?.reporterName;
+  const qpReporter      = searchParams.get('reporter'); // only 'me' is expected here
+  const reporterFilter  = stateReporterId ?? qpReporter; // UUID from state OR 'me' from QP
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    setLoading(true);
-
-    if (reporterFilter && reporterFilter !== 'me' && reporterFilter !== user?.uid && !isAdmin) {
-      navigate('/issues');
-      return;
+    // ── Auth-gated views ────────────────────────────────────────────────────────
+    // "My Issues" (?reporter=me) requires the user to be identified — wait for auth.
+    // All other views (public community or citizen filter) fetch immediately on mount.
+    if (qpReporter === 'me') {
+      if (user === undefined) return;          // auth still initializing — wait
+      if (user === null) { navigate('/issues'); return; } // not signed in
     }
 
+    setLoading(true);
+
+    // ── Civic issues are public — any visitor can browse ────────────────────────
     async function fetchIssues() {
       let query = supabase
         .from('issues')
-        .select('*')
+        // Only fetch columns needed by IssueCard — avoids pulling heavy JSONB blobs
+        .select('id, title, description, status, category, photo_url, reported_at, upvotes, ai_authenticity, severity, reported_by')
         .order('reported_at', { ascending: false })
         .limit(100);
 
-      if (reporterFilter && reporterFilter !== 'me' && user) {
-        query = query.eq('reported_by', reporterFilter);
-      } else if (reporterFilter === 'me' && user) {
+      if (stateReporterId) {
+        query = query.eq('reported_by', stateReporterId);
+      } else if (qpReporter === 'me' && user) {
         query = query.eq('reported_by', user.id);
       }
 
@@ -162,7 +179,7 @@ export default function IssuesList() {
       setLoading(false);
     }
     fetchIssues();
-  }, [reporterFilter, user, isAdmin, navigate]);
+  }, [stateReporterId, qpReporter, user, navigate]);
 
   const filtered = issues.filter((issue) => {
     const statusOk   = statusFilter === 'all' || issue.status === statusFilter;
@@ -202,7 +219,7 @@ export default function IssuesList() {
             {reporterFilter === 'me'
               ? 'My Reported Issues'
               : reporterFilter
-                ? `${targetName || 'Citizen'}'s Reported Issues`
+                ? `${reporterName || 'Citizen'}'s Reported Issues`
                 : 'Issues Directory'}
           </h1>
           <p className="text-sm mt-1" style={{ color: 'var(--color-fog)' }}>

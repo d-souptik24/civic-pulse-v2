@@ -14,7 +14,7 @@ router.post('/', requireAdmin, async (req, res) => {
     // 1. Fetch open issues (+ upvote threshold filter pushed to DB)
     let query = supabase
       .from('issues')
-      .select('id, title, category, description, upvotes, reported_at, ai_authenticity')
+      .select('id, title, category, description, upvotes, reported_at, ai_authenticity, status_history')
       .eq('status', 'open')
       .gte('upvotes', 3); // must have at least 3 upvotes
 

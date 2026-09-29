@@ -248,7 +248,7 @@ export default function LeaderboardPage() {
                 return (
                   <div
                     key={citizen.id}
-                    onClick={() => navigate(`/issues?reporter=${citizen.id}&name=${encodeURIComponent(citizen.displayName || 'Citizen')}`)}
+                    onClick={() => navigate('/issues', { state: { reporterId: citizen.id, reporterName: citizen.displayName || 'Citizen' } })}
                     className={`card-white p-4 flex items-center gap-4 transition-all duration-200 hover:scale-[1.01] hover:shadow-md cursor-pointer ${
                       isMe ? 'hover:bg-[#F5EEF5]' : 'hover:bg-[#F8F6F4]'
                     }`}

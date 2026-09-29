@@ -2,6 +2,7 @@ import express from 'express';
 import { supabase } from '../lib/supabase.js';
 import auth, { requireAdmin } from '../middleware/auth.js';
 import { verifyVerdict } from '../lib/token.js';
+import { isValidStorageUrl, isValidCoordinate } from '../lib/validation.js';
 
 const router = express.Router();
 
@@ -37,8 +38,8 @@ router.get('/', async (req, res) => {
 router.post('/deduplicate', auth, async (req, res) => {
   try {
     const { lat, lng, category } = req.body;
-    if (!lat || !lng || !category) {
-      return res.status(400).json({ error: 'Missing lat, lng, or category' });
+    if (!category || !isValidCoordinate(lat, lng)) {
+      return res.status(400).json({ error: 'Missing category or invalid coordinates' });
     }
 
     const { data, error } = await supabase.rpc('find_nearby_issues', {
@@ -74,8 +75,12 @@ router.post('/', auth, async (req, res) => {
 
     const userId = req.user.uid;
 
-    if (!location?.lat || !location?.lng) {
-      return res.status(400).json({ error: 'Missing required location fields' });
+    if (!isValidCoordinate(location?.lat, location?.lng)) {
+      return res.status(400).json({ error: 'Missing or invalid location coordinates' });
+    }
+
+    if (imageUrl && !isValidStorageUrl(imageUrl)) {
+      return res.status(400).json({ error: 'Invalid or unauthorized image URL' });
     }
 
     // Verify the HMAC-signed AI verdict token — prevents client forgery
@@ -93,6 +98,15 @@ router.post('/', auth, async (req, res) => {
       return res.status(403).json({
         rejected: true,
         reason: 'Our AI could not identify a civic infrastructure issue in this photo.'
+      });
+    }
+
+    // Token-Binding Check: Ensure the submitted image URL matches the one that was analyzed
+    if (verdict.data.imageUrl && imageUrl && verdict.data.imageUrl !== imageUrl) {
+      console.warn(`Image URL mismatch for user ${userId}`);
+      return res.status(403).json({
+        rejected: true,
+        reason: 'Image URL mismatch between AI verification and issue submission.'
       });
     }
 
