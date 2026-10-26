@@ -6,17 +6,11 @@ on:
     - cron: '0 0 */2 * *'
   workflow_dispatch: # Allows manual trigger from GitHub Actions tab to test anytime
 
-permissions:
-  contents: write # Needed for keepalive-workflow to prevent GitHub 60-day scheduled workflow auto-disable
-
 jobs:
   keep-alive:
     name: Ping Supabase Database
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
       - name: Ping Supabase Database via PostgREST
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -28,7 +22,7 @@ jobs:
           fi
 
           echo "Pinging Supabase database (bypassing edge cache)..."
-          HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" \
+          HTTP_STATUS=$(curl -sS -o response.json -w "%{http_code}" \
             -H "apikey: $SUPABASE_ANON_KEY" \
             -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
             -H "Cache-Control: no-cache, no-store, must-revalidate" \
@@ -39,6 +33,7 @@ jobs:
           cat response.json
           echo ""
 
+          HTTP_STATUS="${HTTP_STATUS:-0}"
           if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
             echo "✅ Successfully pinged Supabase PostgreSQL database."
           else
@@ -52,7 +47,7 @@ jobs:
         run: |
           TARGET_URL="${APP_URL:-https://civic-pulse-in.vercel.app}"
           echo "Pinging deployed backend health check: $TARGET_URL/api/health..."
-          curl -s -f -H "Cache-Control: no-cache" "$TARGET_URL/api/health" || echo "Warning: App URL ping failed, but Supabase database was already pinged."
-
-      - name: Prevent GitHub 60-Day Workflow Auto-Disable
-        uses: gautamkrishnar/keepalive-workflow@v2
+          RESPONSE=$(curl -sS -f -H "Cache-Control: no-cache" "$TARGET_URL/api/health") || echo "Warning: App URL ping failed, but Supabase database was already pinged."
+          if [ -n "$RESPONSE" ]; then
+            echo "App Health Response: $RESPONSE"
+          fi
